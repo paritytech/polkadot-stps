@@ -1,3 +1,5 @@
+bin
+
 # Cargo compiled files and executables
 **/target/
 
