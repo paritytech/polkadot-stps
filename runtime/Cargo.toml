@@ -1,11 +1,8 @@
 [package]
-name = "parachain-template-runtime"
+name = "ecosystem-performance-runtime"
 version = "0.1.0"
-authors = ["Anonymous"]
-description = "A new Cumulus FRAME-based Substrate Runtime, ready for hacking together a parachain."
-license = "Unlicense"
-homepage = "https://substrate.io"
-repository = "https://github.com/paritytech/cumulus/"
+description = "Collator for Ecosystem Performance Benchmarking"
+license = "GPLv3"
 edition = "2021"
 
 [package.metadata.docs.rs]
@@ -23,7 +20,10 @@ serde = { version = "1.0.132", optional = true, features = ["derive"] }
 smallvec = "1.6.1"
 
 # Local Dependencies
-pallet-template = { path = "../pallets/template", default-features = false }
+pallet-acala-performance = { path = "../pallets/acala", default-features = false }
+pallet-astar-performance = { path = "../pallets/astar", default-features = false }
+pallet-efinity-performance = { path = "../pallets/efinity", default-features = false }
+pallet-moonbeam-performance = { path = "../pallets/moonbeam", default-features = false }
 
 # Substrate Dependencies
 ## Substrate Primitive Dependencies
@@ -111,7 +111,10 @@ std = [
 	"pallet-collator-selection/std",
 	"pallet-session/std",
 	"pallet-sudo/std",
-	"pallet-template/std",
+	"pallet-acala-performance/std",
+	"pallet-astar-performance/std",
+	"pallet-efinity-performance/std",
+	"pallet-moonbeam-performance/std",
 	"pallet-timestamp/std",
 	"pallet-transaction-payment-rpc-runtime-api/std",
 	"pallet-transaction-payment/std",
@@ -142,7 +145,10 @@ runtime-benchmarks = [
 	"frame-system/runtime-benchmarks",
 	"pallet-balances/runtime-benchmarks",
 	"pallet-collator-selection/runtime-benchmarks",
-	"pallet-template/runtime-benchmarks",
+	"pallet-acala-performance/runtime-benchmarks",
+	"pallet-astar-performance/runtime-benchmarks",
+	"pallet-efinity-performance/runtime-benchmarks",
+	"pallet-moonbeam-performance/runtime-benchmarks",
 	"pallet-timestamp/runtime-benchmarks",
 	"pallet-xcm/runtime-benchmarks",
 	"cumulus-pallet-session-benchmarking/runtime-benchmarks",
