@@ -1,13 +1,13 @@
 use crate::{
 	chain_spec,
 	cli::{Cli, RelayChainCli, Subcommand},
-	service::{new_partial, TemplateRuntimeExecutor},
+	service::{new_partial, EcosystemPerformanceRuntimeExecutor},
 };
 use codec::Encode;
 use cumulus_client_service::genesis::generate_genesis_block;
 use cumulus_primitives_core::ParaId;
 use log::info;
-use parachain_template_runtime::{Block, RuntimeApi};
+use ecosystem_performance_runtime::{Block, RuntimeApi};
 use polkadot_parachain::primitives::AccountIdConversion;
 use sc_cli::{
 	ChainSpec, CliConfiguration, DefaultConfigurationValues, ImportParams, KeystoreParams,
@@ -32,7 +32,7 @@ fn load_spec(id: &str) -> std::result::Result<Box<dyn sc_service::ChainSpec>, St
 
 impl SubstrateCli for Cli {
 	fn impl_name() -> String {
-		"Parachain Collator Template".into()
+		"Ecosystem Performance Parachain".into()
 	}
 
 	fn impl_version() -> String {
@@ -40,7 +40,7 @@ impl SubstrateCli for Cli {
 	}
 
 	fn description() -> String {
-		"Parachain Collator Template\n\nThe command-line arguments provided first will be \
+		"Ecosystem Performance Parachain\n\nThe command-line arguments provided first will be \
 		passed to the parachain node, while the arguments provided after -- will be passed \
 		to the relay chain node.\n\n\
 		parachain-collator <parachain-args> -- <relay-chain-args>"
@@ -64,13 +64,13 @@ impl SubstrateCli for Cli {
 	}
 
 	fn native_runtime_version(_: &Box<dyn ChainSpec>) -> &'static RuntimeVersion {
-		&parachain_template_runtime::VERSION
+		&ecosystem_performance_runtime::VERSION
 	}
 }
 
 impl SubstrateCli for RelayChainCli {
 	fn impl_name() -> String {
-		"Parachain Collator Template".into()
+		"Ecosystem Performance Parachain".into()
 	}
 
 	fn impl_version() -> String {
@@ -78,7 +78,7 @@ impl SubstrateCli for RelayChainCli {
 	}
 
 	fn description() -> String {
-		"Parachain Collator Template\n\nThe command-line arguments provided first will be \
+		"Ecosystem Performance Parachain\n\nThe command-line arguments provided first will be \
 		passed to the parachain node, while the arguments provided after -- will be passed \
 		to the relay chain node.\n\n\
 		parachain-collator <parachain-args> -- <relay-chain-args>"
@@ -90,7 +90,7 @@ impl SubstrateCli for RelayChainCli {
 	}
 
 	fn support_url() -> String {
-		"https://github.com/paritytech/cumulus/issues/new".into()
+		"https://github.com/paritytech/ecosystem-benchmarks/issues/new".into()
 	}
 
 	fn copyright_start_year() -> i32 {
@@ -122,7 +122,7 @@ macro_rules! construct_async_run {
 		runner.async_run(|$config| {
 			let $components = new_partial::<
 				RuntimeApi,
-				TemplateRuntimeExecutor,
+				EcosystemPerformanceRuntimeExecutor,
 				_
 			>(
 				&$config,
@@ -235,7 +235,7 @@ pub fn run() -> Result<()> {
 			if cfg!(feature = "runtime-benchmarks") {
 				let runner = cli.create_runner(cmd)?;
 
-				runner.sync_run(|config| cmd.run::<Block, TemplateRuntimeExecutor>(config))
+				runner.sync_run(|config| cmd.run::<Block, EcosystemPerformanceRuntimeExecutor>(config))
 			} else {
 				Err("Benchmarking wasn't enabled when building the node. \
 				You can enable it with `--features runtime-benchmarks`."
@@ -252,7 +252,7 @@ pub fn run() -> Result<()> {
 						.map_err(|e| format!("Error: {:?}", e))?;
 
 				runner.async_run(|config| {
-					Ok((cmd.run::<Block, TemplateRuntimeExecutor>(config), task_manager))
+					Ok((cmd.run::<Block, EcosystemPerformanceRuntimeExecutor>(config), task_manager))
 				})
 			} else {
 				Err("Try-runtime must be enabled by `--features try-runtime`.".into())
