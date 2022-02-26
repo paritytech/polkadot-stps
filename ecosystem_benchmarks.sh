@@ -3,13 +3,6 @@
 POLKADOT_V=v0.9.17-rc4
 ZOMBIENET_V=v1.2.14
 
-# because zombienet is packaged into an executable, we need some workarounds (steam-run) to execute it under NixOS
-if grep -q 'NAME=NixOS' /etc/os-release; then
-  EXECUTABLE_PREFIX="steam-run"
-else
-  EXECUTABLE_PREFIX=""
-fi
-
 fetch_zombienet() {
   if [ ! -s bin/zombienet-linux ]; then
     echo "fetching zombienet executable..."
@@ -33,6 +26,7 @@ build_collator() {
     ln -s target/release/parachain-collator bin/parachain-collator
   fi
 }
+
 run_ecosystem_benchmarks() {
   if [ ! -d bin ]; then
     mkdir bin
@@ -42,7 +36,7 @@ run_ecosystem_benchmarks() {
   fetch_polkadot
   build_collator
 
-  $EXECUTABLE_PREFIX ./bin/zombienet-linux
+  ./bin/zombienet-linux -p native test tests/examples/0001-simple-network.feature
 }
 
 run_ecosystem_benchmarks
