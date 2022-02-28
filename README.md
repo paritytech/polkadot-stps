@@ -9,4 +9,4 @@ However, instead of `polkadot-launch`, we use [`zombienet`](https://github.com/p
 The proposed collaborative workflow:
 - Each team writes a pallet with the extrinsic calls that they wish to evaluate the performance.
 - The team adds their own `.toml` and `.feature` files into the `tests` directory, according to `zombienet`'s [network](https://github.com/paritytech/zombienet/blob/main/docs/network-definition-spec.md) and [test](https://github.com/paritytech/zombienet/blob/main/docs/test-dsl-definition-spec.md) definitions, respectively.
-- Finally, the `ecosystem_benchmarks.sh` script automates the test execution.
+- Finally, the `zombienet.sh` script automates the test execution.
