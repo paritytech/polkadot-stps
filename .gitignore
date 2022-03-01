@@ -1,3 +1,5 @@
+genesis-state
+genesis-wasm
 bin
 shell.nix
 
