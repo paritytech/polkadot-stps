@@ -39,5 +39,5 @@ id = 100
   [parachains.collator]
   name = "collator01"
   image = "{{COL_IMAGE}}"
-  command = "/usr/local/bin/adder-collator"
+  command = "target/release/parachain-collator"
   args = ["-lparachain=debug"]

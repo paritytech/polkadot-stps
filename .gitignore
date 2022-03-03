@@ -1,7 +1,8 @@
 genesis-state
 genesis-wasm
-bin
 shell.nix
+zombienet
+polkadot
 
 # Cargo compiled files and executables
 **/target/
