@@ -1,7 +1,6 @@
-#!/bin/sh
+#!/bin/bash
 
 POLKADOT_V=v0.9.17-rc4
-ZOMBIENET_V=v1.2.14
 
 print_help() {
   echo "🧟 Zombienet Ecosystem Performance Optimizations 🦾"
@@ -10,53 +9,70 @@ print_help() {
   echo "first, create a pallet for your team, including the extrinsics you want to run tests for."
   echo "make sure you read zombienet specs from it's official repo: https://github.com/paritytech/zombienet"
   echo "write the zombienet test specifications under the tests directory"
-  echo "then, call this script with the following parameters:"
-  echo "$ ./zombienet.sh test <team_name> <test_name>"
-  echo ""
+  echo "then, call this script:"
+  echo "$ ./zombienet.sh init"
+  echo "$ ./zombienet.sh test tests/examples/0001-simple-network.feature"
+  echo "$ ./zombienet.sh spawn tests/examples/0001-simple-network.toml"
 }
 
 fetch_zombienet() {
-  if [ ! -s bin/zombienet-linux ]; then
-    echo "fetching zombienet executable..."
-    wget --quiet --directory-prefix bin https://github.com/paritytech/zombienet/releases/download/$ZOMBIENET_V/zombienet-linux
-    chmod +x bin/zombienet-linux
+  if [ ! -d zombienet ]; then
+    echo "cloning zombienet..."
+    git clone https://github.com/paritytech/zombienet.git -b feat-support-cumulus
+    pushd zombienet
+    echo "building zombienet..."
+    npm install
+    npm run build
+    popd
   fi
 }
 
 fetch_polkadot() {
-  if [ ! -s bin/polkadot ]; then
+  if [ ! -s polkadot ]; then
     echo "fetching polkadot executable..."
-    wget --quiet --directory-prefix bin https://github.com/paritytech/polkadot/releases/download/$POLKADOT_V/polkadot
-    chmod +x bin/polkadot
+    wget --quiet https://github.com/paritytech/polkadot/releases/download/$POLKADOT_V/polkadot
+    chmod +x polkadot
   fi
 }
 
 build_collator() {
-  if [ ! -L bin/parachain-collator ]; then
+  if [ ! -s target/release/parachain-collator ]; then
     echo "building collator executable..."
     cargo build --release --quiet
-    ln -s target/release/parachain-collator bin/parachain-collator
   fi
 }
 
-run_ecosystem_benchmarks() {
-  if [ ! -d bin ]; then
-    mkdir bin
-  fi
+zombienet_test() {
+  zombienet_init
+  node zombienet/dist/cli.js test --provider native $1
+}
 
+zombienet_spawn() {
+  zombienet_init
+  node zombienet/dist/cli.js spawn --provider native $1
+}
+
+zombienet_init() {
+  if [ ! -d bin ]; then
+     mkdir bin
+  fi
   fetch_zombienet
   fetch_polkadot
   build_collator
-
-  ./bin/zombienet-linux -p native test tests/examples/0001-simple-network.feature
 }
 
-while getopts ":h" option; do
-   case $option in
-      h) # display Help
-         print_help
-         exit;;
-   esac
-done
-
-run_ecosystem_benchmarks
+subcommand=$1
+case $subcommand in
+  "" | "-h" | "--help")
+    print_help
+    ;;
+  *)
+    shift
+    zombienet_${subcommand} $@
+    if [ $? = 127 ]; then
+      echo "Error: '$subcommand' is not a known subcommand." >&2
+      echo "Run './zombienet.sh --help' for a list of known subcommands." >&2
+        exit 1
+    fi
+  ;;
+esac
