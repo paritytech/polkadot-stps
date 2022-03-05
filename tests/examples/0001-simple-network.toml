@@ -18,12 +18,14 @@ default_command = "./polkadot"
 
 [[parachains]]
 id = 100
-addToGenesis = false
+addToGenesis = true
+cumulus_based = true
 
   [parachains.collator]
   name = "collator01"
   image = "{{COL_IMAGE}}"
   command = "target/release/parachain-collator"
+  args = ["-lparachain=debug"]
 
 [types.Header]
 number = "u64"
