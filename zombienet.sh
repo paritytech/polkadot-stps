@@ -18,7 +18,7 @@ print_help() {
 fetch_zombienet() {
   if [ ! -d zombienet ]; then
     echo "cloning zombienet..."
-    git clone https://github.com/paritytech/zombienet.git -b feat-cumulus-based
+    git clone https://github.com/paritytech/zombienet.git
     pushd zombienet
     echo "building zombienet..."
     npm install
