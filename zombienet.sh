@@ -1,6 +1,7 @@
 #!/bin/bash
 
 POLKADOT_V=v0.9.17-rc4
+ZOMBIENET_V=v1.2.20
 
 print_help() {
   echo "🧟 Zombienet Ecosystem Performance Optimizations 🦾"
@@ -16,14 +17,10 @@ print_help() {
 }
 
 fetch_zombienet() {
-  if [ ! -d zombienet ]; then
-    echo "cloning zombienet..."
-    git clone https://github.com/paritytech/zombienet.git
-    pushd zombienet
-    echo "building zombienet..."
-    npm install
-    npm run build
-    popd
+  if [ ! -s zombienet-linux ]; then
+    echo "fetch zombienet..."
+    wget --quiet https://github.com/paritytech/zombienet/releases/download/$ZOMBIENET_V/zombienet-linux
+    chmod +x zombienet-linux
   fi
 }
 
@@ -38,24 +35,21 @@ fetch_polkadot() {
 build_collator() {
   if [ ! -s target/release/parachain-collator ]; then
     echo "building collator executable..."
-    cargo build --release --quiet
+    cargo build --release
   fi
 }
 
 zombienet_test() {
   zombienet_init
-  node zombienet/dist/cli.js test --provider native $1
+  ./zombienet-linux test --provider native $1
 }
 
 zombienet_spawn() {
   zombienet_init
-  node zombienet/dist/cli.js spawn --provider native $1
+  ./zombienet-linux spawn --provider native $1
 }
 
 zombienet_init() {
-  if [ ! -d bin ]; then
-     mkdir bin
-  fi
   fetch_zombienet
   fetch_polkadot
   build_collator
