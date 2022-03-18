@@ -18,7 +18,7 @@ print_help() {
 
 fetch_zombienet() {
   if [ ! -s zombienet-linux ]; then
-    echo "fetch zombienet..."
+    echo "fetching zombienet executable..."
     wget --quiet https://github.com/paritytech/zombienet/releases/download/$ZOMBIENET_V/zombienet-linux
     chmod +x zombienet-linux
   fi
