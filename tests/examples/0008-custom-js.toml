@@ -25,3 +25,4 @@ cumulus_based = true
   name = "collator01"
   image = "{{COL_IMAGE}}"
   command = "target/release/parachain-collator"
+  args = ["-lparachain=debug"]
