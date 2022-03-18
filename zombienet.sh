@@ -32,6 +32,13 @@ fetch_polkadot() {
   fi
 }
 
+install_polkadotjs() {
+  if [[ ! $(npm list | grep polkadot) ]]; then
+    echo "installing polkadot-js..."
+    npm install @polkadot/api
+  fi
+}
+
 build_collator() {
   if [ ! -s target/release/parachain-collator ]; then
     echo "building collator executable..."
@@ -50,6 +57,7 @@ zombienet_spawn() {
 }
 
 zombienet_init() {
+  install_polkadotjs
   fetch_zombienet
   fetch_polkadot
   build_collator
