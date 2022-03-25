@@ -1,0 +1,29 @@
+name: E2E Zombienet CI
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v2
+      # toolchain
+      - name: Install toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly-2021-12-01
+          components: rustfmt, clippy
+          target: wasm32-unknown-unknown
+          override: true
+          default: true
+      # zombienet
+      - name: Run zombienet
+        run: |
+          ./zombienet.sh test tests/examples/0008-custom-js.feature
