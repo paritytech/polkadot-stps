@@ -11,6 +11,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v2
+      # toolchain
       - name: Install toolchain
         uses: actions-rs/toolchain@v1
         with:
@@ -20,6 +23,7 @@ jobs:
           target: wasm32-unknown-unknown
           override: true
           default: true
+      # zombienet
       - name: Run zombienet
         run: |
           ./zombienet.sh test tests/examples/0008-custom-js.feature
