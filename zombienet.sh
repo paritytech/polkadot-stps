@@ -1,7 +1,7 @@
 #!/bin/bash
 
 POLKADOT_V=v0.9.17-rc4
-ZOMBIENET_V=v1.2.20
+ZOMBIENET_V=v1.2.27
 
 print_help() {
   echo "🧟 Zombienet Ecosystem Performance Optimizations 🦾"
