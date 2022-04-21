@@ -4,6 +4,11 @@ shell.nix
 zombienet-linux
 polkadot
 
+# js
+node_modules
+package-lock.json
+package.json
+
 # Cargo compiled files and executables
 **/target/
 
