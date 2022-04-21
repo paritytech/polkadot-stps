@@ -6,7 +6,7 @@ The following cases are measured for sTPS:
 - Multiple Pachains (5, 10, 50, and 100).
 
 The network topologies consist of:
-- 5 nodes for each network (solo, para or relay). 
+- 5 nodes for each network (solo, para and relay). 
 - All nodes are spawn via k8 on bare metal instances. (ToDo: write machine specs)
 - Each node receives 20% of the transactions over its RPC endpoint.
 
