@@ -2,7 +2,7 @@
 
 Standard Transactions Per Second (sTPS) is a cross chain standard in what counts as a transaction, and basically means a balance-transfer from one pre-existing account to another pre-existing account with neither account having been read from or written to thus far in the block.
 
-Main points of the sTPS standard are:
+Main points of sTPS are:
 
 - Balance transfer
 - Neither account may have been read/written/touched/cached thus far in the benchmarks
