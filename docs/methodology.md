@@ -10,7 +10,7 @@ The network topologies consist of:
 - All nodes are spawn via k8 on bare metal instances.
 - Each node receives 20% of the transactions over its RPC endpoint.
 
-[Zombienet](https://github.com/paritytech/zombienet) is used for automating the setup, where the files under [`tests/stps`](../tests/spts) specify:
+[Zombienet](https://github.com/paritytech/zombienet) is used for automating the setup, where the files under [`tests/stps`](https://github.com/paritytech/ecosystem-performance-benchmarks/tree/main/tests/stps) specify:
 - `*.toml`: network topologies for each setup
 - `*.feature`:  DSL test specifications
 - `*tx.js`: PolkadotJS-based API calls for tx execution
