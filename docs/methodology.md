@@ -24,6 +24,8 @@ The JavaScript files have simple loops for sequential initiation of transactions
 - 1000 Tx per node, 5000 Tx total
 - 2000 Tx per node, 10000 Tx total
 
+The target execution times are manually adjusted on the `*.feature` files such that they have the smallest possible size while still returning successfully.
+
 The `zombienet.sh` script automates the process of bootstrapping the setup.
 
 # Ecosystem Performance
