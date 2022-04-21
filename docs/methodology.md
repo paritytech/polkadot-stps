@@ -7,7 +7,7 @@ The following cases are measured for sTPS:
 
 The network topologies consist of:
 - 5 nodes for each network (solo, para or relay). 
-- All nodes are spawn via k8 on bare metal instances.
+- All nodes are spawn via k8 on bare metal instances. (ToDo: write machine specs)
 - Each node receives 20% of the transactions over its RPC endpoint.
 
 [Zombienet](https://github.com/paritytech/zombienet) is used for automating the setup, where the files under [`tests/stps`](https://github.com/paritytech/ecosystem-performance-benchmarks/tree/main/tests/stps) specify:
