@@ -4,9 +4,9 @@ POLKADOT_V=v0.9.17-rc4
 ZOMBIENET_V=v1.2.27
 
 print_help() {
-  echo "🧟 Zombienet Ecosystem Performance Optimizations 🦾"
+  echo "🧟 Zombienet - Polkadot Ecosystem Performance Benchmarks 🦾"
   echo ""
-  echo "we are about to spin a polkadot relay chain with a parachain node with extrinsics to be tested against."
+  echo "we are about to spin a polkadot relay chain with a parachain node with runtime extrinsics to be tested against."
   echo "first, create a pallet for your team, including the extrinsics you want to run tests for."
   echo "make sure you read zombienet specs from it's official repo: https://github.com/paritytech/zombienet"
   echo "write the zombienet test specifications under the tests directory"
