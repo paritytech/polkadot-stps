@@ -56,6 +56,8 @@ install_gcloud() {
   fi
 }
 
+# todo: init_gcloud
+
 build_collator() {
   if [ ! -s target/release/parachain-collator ]; then
     echo "building collator executable..."
@@ -77,6 +79,7 @@ zombienet_init() {
   install_polkadotjs
   install_kubectl
   install_gcloud
+  # todo: init_gcloud
   fetch_zombienet
   fetch_polkadot
   build_collator
