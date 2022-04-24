@@ -3,6 +3,7 @@ genesis-wasm
 shell.nix
 zombienet-linux
 polkadot
+kubectl
 
 # js
 node_modules

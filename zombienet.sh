@@ -39,6 +39,23 @@ install_polkadotjs() {
   fi
 }
 
+install_kubectl() {
+  if ! command -v kubectl &> /dev/null; then
+    echo "installing kubectl..."
+    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+    sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+  fi
+}
+
+install_gcloud() {
+  if ! command -v gcloud &> /dev/null; then
+    echo "installing gcloud"
+    curl -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-382.0.0-linux-x86_64.tar.gz
+    tar -xf google-cloud-cli-382.0.0-linux-x86.tar.gz
+    ./google-cloud-sdk/install.sh
+  fi
+}
+
 build_collator() {
   if [ ! -s target/release/parachain-collator ]; then
     echo "building collator executable..."
@@ -58,6 +75,8 @@ zombienet_spawn() {
 
 zombienet_init() {
   install_polkadotjs
+  install_kubectl
+  install_gcloud
   fetch_zombienet
   fetch_polkadot
   build_collator
