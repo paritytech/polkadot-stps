@@ -51,7 +51,7 @@ install_gcloud() {
   if ! command -v gcloud &> /dev/null; then
     echo "installing gcloud"
     curl -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-382.0.0-linux-x86_64.tar.gz
-    tar -xf google-cloud-cli-382.0.0-linux-x86.tar.gz
+    tar -xf google-cloud-cli-382.0.0-linux-x86_64.tar.gz
     ./google-cloud-sdk/install.sh
   fi
 }
