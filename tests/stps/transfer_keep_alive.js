@@ -39,6 +39,7 @@ async function run(nodeName, networkInfo, args) {
 
     while (true) {
         const transfer = api.tx.balances.transfer_keep_alive(BOB, 12345);
+        // todo: batch sign before loop
         const hash = await transfer.signAndSend(alice);
         tx_count++;
         console.log('Transfer sent with hash', hash.toHex());
