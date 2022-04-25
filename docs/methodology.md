@@ -26,7 +26,7 @@ The `zombienet.sh` script automates the process of bootstrapping the setup, name
 - building the parachain collator.
 - ToDo: feeding the correct kubernetes parameters to `zombienet-linux`.
 
-Being a container-based technology, Kubernetes introduces a networking overhead that should be taken into account into the interpretation of the results.
+Being a container-based technology, Kubernetes introduces a performance overhead that should be taken into account into the interpretation of the results.
 
 # Ecosystem Performance
 

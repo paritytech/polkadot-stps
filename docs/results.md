@@ -1,6 +1,6 @@
 # Standard Transactions Per Second
 
-Being a container-based technology, Kubernetes introduces a networking overhead that should be taken into account into the interpretation of the results.
+Being a container-based technology, Kubernetes introduces a performance overhead that should be taken into account into the interpretation of the results.
 
 ToDo: fill this table
 
