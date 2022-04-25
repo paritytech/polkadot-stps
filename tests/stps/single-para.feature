@@ -5,5 +5,4 @@ Creds: config
 
 alice: is up
 bob: is up
-collator01: js-script ./balances.js return is greater than 1 within 200 seconds
-alice: js-script ./balances.js within 200 seconds
+collator01: js-script ./transfer_keep_alive.js
