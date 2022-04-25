@@ -1,6 +1,10 @@
 const polkadotApi = require("@polkadot/api");
 const { Keyring } = require('@polkadot/keyring');
 
+// ToDO: write assertions for:
+// - Neither account may have been read/written/touched/cached thus far in the benchmarks (worst case scenario for Substrate)
+// - No account cleanup
+// for now we're doing Alice and Bob for simplicity
 const BOB = '5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty';
 
 var tx_count;
@@ -27,6 +31,7 @@ async function run(nodeName, networkInfo, args) {
     tx_count = 0;
     tps = 0;
 
+    // for now we're doing Alice and Bob for simplicity
     const keyring = new Keyring({ type: 'sr25519' });
     const alice = keyring.addFromUri('//Alice');
 
