@@ -21,10 +21,8 @@ path = "src/main.rs"
 
 [features]
 runtime-benchmarks = [
-	"parachain-template-runtime/runtime-benchmarks",
 	"polkadot-cli/runtime-benchmarks",
 ]
-try-runtime = ["parachain-template-runtime/try-runtime"]
 
 [dependencies]
 clap = { version = "3.1", features = ["derive"] }

@@ -1,6 +1,6 @@
 # Polkadot sTPS
 
-This repository is meant to aggregate performance benchmarks from the Polkadot Ecosystem and make them into Standard Transaction Per Second ([sTPS](https://github.com/paritytech/ecosystem-performance-benchmarks/blob/main/docs/introduction.md)).
+This repository is meant to aggregate performance benchmarks from the Polkadot Ecosystem and act as source of truth for Standard Transaction Per Second ([sTPS](https://github.com/paritytech/ecosystem-performance-benchmarks/blob/main/docs/introduction.md)).
 
 The measurements are intended to replicate different possible network topologies and provide reference estimates of throughput capacity of substrate-based multichain environments.
 
