@@ -13,9 +13,11 @@ The network topologies consist of:
 [Zombienet](https://github.com/paritytech/zombienet) is used for automating the setup, where the files under [`tests/stps`](https://github.com/paritytech/ecosystem-performance-benchmarks/tree/main/tests/stps) specify:
 - `*.toml`: network topologies for each setup
 - `*.feature`:  DSL test specifications
-- `*.js`: PolkadotJS-based RPC calls for tx execution
+- `transfer_keep_alive.js`: JS-based logic for tx execution
 
-The JavaScript files have simple loops for initiation of transactions towards one specific node. The Zombienet DSL on `.feature` files is responsible for specifying the different 5 nodes as targets for each `.js`.
+`transfer_keep_alive.js` has a simple loop for initiation of transactions towards one specific node. The transactions are pre-signed in batch, such the sTPS values aren't influenced by the computation overhead coming from signatures.
+
+The Zombienet DSL on `.feature` files is responsible for specifying the different 5 nodes as targets for each `.js`.
 
 The execution times are measured within each `.js` script and returned as a result of the `run` function.
 
