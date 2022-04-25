@@ -51,10 +51,8 @@ use polkadot_runtime_common::{BlockHashCount, RocksDbWeight, SlowAdjustingFeeUpd
 use xcm::latest::prelude::BodyId;
 use xcm_executor::XcmExecutor;
 
-pub use pallet_acala_performance;
-pub use pallet_astar_performance;
-pub use pallet_efinity_performance;
-pub use pallet_moonbeam_performance;
+/// Import the template pallet.
+pub use pallet_template;
 
 /// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
 pub type Signature = MultiSignature;
@@ -169,8 +167,8 @@ impl_opaque_keys! {
 
 #[sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
-	spec_name: create_runtime_str!("performance-benchmarking-parachain"),
-	impl_name: create_runtime_str!("performance-benchmarking-parachain"),
+	spec_name: create_runtime_str!("template-parachain"),
+	impl_name: create_runtime_str!("template-parachain"),
 	authoring_version: 1,
 	spec_version: 1,
 	impl_version: 0,
@@ -450,19 +448,8 @@ impl pallet_collator_selection::Config for Runtime {
 	type WeightInfo = ();
 }
 
-impl pallet_acala_performance::Config for Runtime {
-	type Event = Event;
-}
-
-impl pallet_astar_performance::Config for Runtime {
-	type Event = Event;
-}
-
-impl pallet_efinity_performance::Config for Runtime {
-	type Event = Event;
-}
-
-impl pallet_moonbeam_performance::Config for Runtime {
+/// Configure the pallet template in pallets/template.
+impl pallet_template::Config for Runtime {
 	type Event = Event;
 }
 
@@ -498,10 +485,8 @@ construct_runtime!(
 		CumulusXcm: cumulus_pallet_xcm::{Pallet, Event<T>, Origin} = 32,
 		DmpQueue: cumulus_pallet_dmp_queue::{Pallet, Call, Storage, Event<T>} = 33,
 
-		AcalaPerformancePallet: pallet_acala_performance::{Pallet, Call, Storage, Event<T>}  = 40,
-		AstarPerformancePallet: pallet_astar_performance::{Pallet, Call, Storage, Event<T>}  = 41,
-		EfinityPerformancePallet: pallet_efinity_performance::{Pallet, Call, Storage, Event<T>}  = 42,
-		MoonbeamPerformancePallet: pallet_moonbeam_performance::{Pallet, Call, Storage, Event<T>}  = 43,
+		// Template
+		TemplatePallet: pallet_template::{Pallet, Call, Storage, Event<T>}  = 40,
 	}
 );
 
@@ -630,7 +615,7 @@ impl_runtime_apis! {
 	#[cfg(feature = "try-runtime")]
 	impl frame_try_runtime::TryRuntime<Block> for Runtime {
 		fn on_runtime_upgrade() -> (Weight, Weight) {
-			log::info!("try-runtime::on_runtime_upgrade parachain-performance-benchmarking.");
+			log::info!("try-runtime::on_runtime_upgrade parachain-template.");
 			let weight = Executive::try_runtime_upgrade().unwrap();
 			(weight, RuntimeBlockWeights::get().max_block)
 		}

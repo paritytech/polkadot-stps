@@ -1,4 +1,4 @@
-//! Benchmarking setup for pallet-acala-performance
+//! Benchmarking setup for pallet-template
 
 use super::*;
 

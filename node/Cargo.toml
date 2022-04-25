@@ -1,8 +1,11 @@
 [package]
-name = "ecosystem-performance-node"
+name = "parachain-template-node"
 version = "0.1.0"
-description = "Collator for Ecosystem Performance Benchmarking"
-license = "GPLv3"
+authors = ["Anonymous"]
+description = "A new Cumulus FRAME-based Substrate Node, ready for hacking together a parachain."
+license = "Unlicense"
+homepage = "https://substrate.io"
+repository = "https://github.com/paritytech/cumulus/"
 edition = "2021"
 build = "build.rs"
 
@@ -18,10 +21,10 @@ path = "src/main.rs"
 
 [features]
 runtime-benchmarks = [
-	"ecosystem-performance-runtime/runtime-benchmarks",
+	"parachain-template-runtime/runtime-benchmarks",
 	"polkadot-cli/runtime-benchmarks",
 ]
-try-runtime = ["ecosystem-performance-runtime/try-runtime"]
+try-runtime = ["parachain-template-runtime/try-runtime"]
 
 [dependencies]
 clap = { version = "3.1", features = ["derive"] }
@@ -35,7 +38,7 @@ hex-literal = "0.3.4"
 jsonrpc-core = "18.0.0"
 
 # Local Dependencies
-ecosystem-performance-runtime = { path = "../runtime" }
+parachain-template-runtime = { path = "../runtime" }
 
 # Substrate Dependencies
 frame-benchmarking = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17" }
