@@ -1,0 +1,22 @@
+[settings]
+timeout = 1000
+
+[relaychain]
+default_image = "{{ZOMBIENET_INTEGRATION_TEST_IMAGE}}"
+chain = "rococo-local"
+default_command = "./polkadot"
+
+[[relaychain.nodes]]
+name = "alice"
+validator = true
+args = [ "--pool-limit", "10000000", "--pool-kbytes", "100000000", "--rpc-max-payload", "16777216" ]
+
+[[relaychain.nodes]]
+name = "bob"
+validator = true
+args = [ "--pool-limit", "10000000", "--pool-kbytes", "100000000", "--rpc-max-payload", "16777216" ]
+
+[[relaychain.nodes]]
+name = "charlie"
+validator = true
+args = [ "--pool-limit", "10000000", "--pool-kbytes", "100000000", "--rpc-max-payload", "16777216" ]
