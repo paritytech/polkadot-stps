@@ -29,5 +29,5 @@ jobs:
           # Prevent the zombienet.sh script from building the collator since it is not needed.
           mkdir -p target/release
           echo "not needed" > target/release/parachain-collator
-          
-          ./zombienet.sh test tests/examples/solo.feature
+
+          ./zombienet.sh test tests/stps/solo.feature
