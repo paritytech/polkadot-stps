@@ -9,14 +9,4 @@ default_command = "./polkadot"
 [[relaychain.nodes]]
 name = "alice"
 validator = true
-args = [ "--pool-limit", "10000000", "--pool-kbytes", "100000000", "--rpc-max-payload", "16777216" ]
-
-[[relaychain.nodes]]
-name = "bob"
-validator = true
-args = [ "--pool-limit", "10000000", "--pool-kbytes", "100000000", "--rpc-max-payload", "16777216" ]
-
-[[relaychain.nodes]]
-name = "charlie"
-validator = true
-args = [ "--pool-limit", "10000000", "--pool-kbytes", "100000000", "--rpc-max-payload", "16777216" ]
+args = [ "--pool-limit", "1000000000", "--pool-kbytes", "10000000000", "--rpc-max-payload", "16777216" ]

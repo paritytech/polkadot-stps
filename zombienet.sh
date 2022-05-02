@@ -1,7 +1,7 @@
 #!/bin/bash
 
-POLKADOT_V=v0.9.17-rc4
-ZOMBIENET_V=v1.2.27
+POLKADOT_V=v0.9.20
+ZOMBIENET_V=v1.2.29
 
 print_help() {
   echo "🧟 Zombienet - Polkadot Ecosystem Performance Benchmarks 🦾"

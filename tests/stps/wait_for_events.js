@@ -1,5 +1,5 @@
 const polkadotApi = require("@polkadot/api");
-const { MAX_TOTAL_TX } = require("./constants");
+const { transfers_of_block } = require("./shared");
 
 async function connect(apiUrl, types) {
 	const provider = new polkadotApi.WsProvider(apiUrl);
@@ -9,41 +9,59 @@ async function connect(apiUrl, types) {
 }
 
 // Checks post conditions.
-// - Check that MAX_TOTAL_TX `Transfer` events got emitted.
+// - Check that NUM_EXT `Transfer` events got emitted.
 async function run(nodeName, networkInfo, args) {
+	const NUM_EXT = parseInt(args);
 	const { wsUri, userDefinedTypes } = networkInfo.nodesByName[nodeName];
 	const api = await connect(wsUri, userDefinedTypes);
 	
-	const events = await all_transfer_events(api);
+	var events = null;
+	await new Promise(async (resolve, _reject) => {
+		// Subscribe to finalized heads
+		// TODO why does this not return an `unsub` function?
+		const unsub = await api.rpc.chain.subscribeFinalizedHeads(async (header) => {
+			const num = header.number.toNumber();
+
+			if (events === null) {
+				events = 0;
+				for (var i = 0; i <= num; i++) {
+					const found = await transfers_of_block(api, i);
+					events += found;
+					console.debug(`Block ${i} has ${found} Transfer events, need ${NUM_EXT-events} more`);
+				}
+			} else {
+				const found = await transfers_of_block(api, num);
+				events += found;
+				console.debug(`Block ${num} has ${found} Transfer events, need ${NUM_EXT-events} more`);
+			}
+
+			if (events >= NUM_EXT) {
+				if (events > NUM_EXT)
+					console.warn(`Found too many Transfer events, ${events} > ${NUM_EXT}`);
+				unsub();
+				resolve();
+			}
+		});
+	});
+	
 	console.info(`Found ${events} Transfer events`);
-	if (events != MAX_TOTAL_TX) {
-		console.error(`Only found ${events} Transfer events instead of ${MAX_TOTAL_TX}`);
+	if (events != NUM_EXT) {
+		console.error(`Only found ${events} Transfer events instead of ${NUM_EXT}`);
 		await find_error(api);
 		process.exit(1);
 	}
 }
 
 async function all_transfer_events(api) {
-	const last = await api.rpc.chain.getBlock();
+	const last = await api.rpc.chain.getFinalizedHead();
 	var events = 0;
 
-	for (var i = 0; i < last.block.header.number; i++)
-		events += await transfers_of_block(api, i);
+	for (var i = 0; i < last.block.header.number; i++) {
+		const in_block = await transfers_of_block(api, i);
+		events += in_block;
+		console.debug(`Found ${in_block} Transfer events in block ${i}`);
+	}
 	return events;
-}
-
-// Returns the number of `Balances::Transfer` events in the block.
-async function transfers_of_block(api, blockNumber) {
-	const blockHash = await api.rpc.chain.getBlockHash(blockNumber);
-	const allRecords = await api.query.system.events.at(blockHash);
-
-	return allRecords
-		.filter(({ phase }) =>
-			phase.isApplyExtrinsic
-		)
-		.filter(({ event }) =>
-			api.events.balances.Transfer.is(event)
-		).length;
 }
 
 async function find_error(api) {
