@@ -34,8 +34,8 @@ async function check_address(api, addr, existential, NUM_EXT) {
 	if (nonce != 0) {
 		throw new Error(`Address has a non-zero nonce: ${nonce}`);
 	}
-	if (free != 10000000000000000)
-		throw new Error(`Address does not have the initial balance but ${free}`);
+	if (free < 10000000000000000)
+		throw new Error(`Address has less than the initial balance: ${free}`);
 	if (free < existential * NUM_EXT * 1.1 /* 10% for fees */)
 		throw new Error(`Address has insufficient funds: ${free}`);
 }

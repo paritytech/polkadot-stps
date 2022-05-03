@@ -14,3 +14,4 @@ hex = "0.4.3"
 futures = "0.3.21"
 log = "0.4.16"
 subxt = "0.20.0"
+clap = { version = "3.1.15", features = ["derive"] }

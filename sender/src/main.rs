@@ -1,3 +1,4 @@
+use clap::Parser;
 use codec::Decode;
 use futures::future::try_join_all;
 use log::*;
@@ -6,6 +7,23 @@ use subxt::{
 	extrinsic::Era, ClientBuilder, DefaultConfig, PairSigner, PolkadotExtrinsicParams,
 	PolkadotExtrinsicParamsBuilder as Params,
 };
+
+/// Send many extrinsics to a node.
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+struct Args {
+	/// The node to connect to.
+	#[clap(long, short)]
+	node: String,
+
+	/// Number of extrinsics to send.
+	#[clap(long, short)]
+	extrinsics: usize,
+
+	/// Chunk size for sending the extrinsics.
+	#[clap(long, short, default_value_t = 50)]
+	chunk_size: usize,
+}
 
 #[subxt::subxt(runtime_metadata_path = "metadata.scale")]
 pub mod runtime {}
@@ -16,20 +34,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info"),
 	);
 
-	let url = std::env::args().skip(1).next().expect("Need node URL as argument");
-	let num_ext = std::env::args()
-		.skip(2)
-		.next()
-		.expect("Need number of extrinsics as argument")
-		.parse::<u32>()
-		.unwrap();
-	info!("Connecting to {}", url);
-
+	let args = Args::parse();
 	let mut signer = PairSigner::new(AccountKeyring::Alice.pair());
-	let receivers = generate_receivers(num_ext);
+	let receivers = generate_receivers(args.extrinsics);
 
 	let api = ClientBuilder::new()
-		.set_url(&url)
+		.set_url(&args.node)
 		.build()
 		.await?
 		.to_runtime_api::<runtime::RuntimeApi<DefaultConfig, PolkadotExtrinsicParams<DefaultConfig>>>(
@@ -37,11 +47,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 	let ext_deposit = api.constants().balances().existential_deposit().unwrap();
 
-	// Send the transaction:
+	info!("Signing {} transactions", args.extrinsics);
 	let mut txs = Vec::new();
-
-	info!("Signing {} transactions", num_ext);
-	for i in 0..num_ext {
+	for i in 0..args.extrinsics {
 		//let dest = AccountKeyring::Bob.to_account_id();
 		signer.set_nonce(i as u32);
 		let tx_params = Params::new().era(Era::Immortal, *api.client.genesis());
@@ -54,14 +62,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		txs.push(tx);
 	}
 
-	// Send the transactions in parallel:
+	info!("Sending {} transactions in chunks of {}", args.extrinsics, args.chunk_size);
 	let mut i = 0;
 	let mut last_now = std::time::Instant::now();
 	let mut last_sent = 0;
 	let start = std::time::Instant::now();
-	const CHUNK_SIZE: usize = 50;
-	info!("Sending {} transactions in chunks of {}", num_ext, CHUNK_SIZE);
-	for chunk in txs.chunks(CHUNK_SIZE) {
+
+	for chunk in txs.chunks(args.chunk_size) {
 		let mut hashes = Vec::new();
 		for tx in chunk {
 			let hash = api.client.rpc().submit_extrinsic(tx);
@@ -71,21 +78,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 		let elapsed = last_now.elapsed();
 		if elapsed >= std::time::Duration::from_secs(1) {
-			let sent = i * CHUNK_SIZE - last_sent;
+			let sent = i * args.chunk_size - last_sent;
 			let rate = sent as f64 / elapsed.as_secs_f64();
 			info!("{} txs sent in {} ms ({:.2} /s)", sent, elapsed.as_millis(), rate);
 			last_now = std::time::Instant::now();
-			last_sent = i * CHUNK_SIZE;
+			last_sent = i * args.chunk_size;
 		}
 		i += 1;
 	}
-	let rate = num_ext as f64 / start.elapsed().as_secs_f64();
-	info!("{} txs sent in {} ms ({:.2} /s)", num_ext, start.elapsed().as_millis(), rate);
+	let rate = args.extrinsics as f64 / start.elapsed().as_secs_f64();
+	info!("{} txs sent in {} ms ({:.2} /s)", args.extrinsics, start.elapsed().as_millis(), rate);
 
 	Ok(())
 }
 
-fn generate_receivers(num: u32) -> Vec<subxt::sp_core::crypto::AccountId32> {
+/// Generates a vector of account IDs.
+fn generate_receivers(num: usize) -> Vec<subxt::sp_core::crypto::AccountId32> {
 	let mut receivers = Vec::new();
 	for i in 0..num {
 		// Decode the account ID from the string:

@@ -3,7 +3,7 @@
 # The number of extrinsics is set to 16384 but can be increased
 # for a real results.
 
-Network: ./solo.toml
+Network: ./relay.toml
 Creds: config
 
 alice: is up

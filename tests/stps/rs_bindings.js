@@ -3,7 +3,7 @@ async function main(url, num_ext) {
 	return new Promise((resolve, _reject) => {
 		const { spawn, ChildProcess } = require('child_process');
 		console.log(`Compiling rust...`);
-		const ls = spawn('cargo', ['r', '--quiet', '--release', '--manifest-path', 'sender/Cargo.toml', '--', url, num_ext]);
+		const ls = spawn('cargo', ['r', '--quiet', '--release', '--manifest-path', 'sender/Cargo.toml', '--', '--node', url, '--extrinsics', num_ext]);
 
 		ls.stdout.on('data', (data) => {
 			process.stdout.write(data);
