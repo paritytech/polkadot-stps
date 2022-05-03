@@ -56,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		let tx = api
 			.tx()
 			.balances()
-			.transfer(receivers[i as usize].clone().into(), ext_deposit)
+			.transfer_keep_alive(receivers[i as usize].clone().into(), ext_deposit)
 			.create_signed(&signer, tx_params)
 			.await?;
 		txs.push(tx);
