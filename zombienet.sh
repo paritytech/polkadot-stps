@@ -35,7 +35,7 @@ fetch_polkadot() {
 }
 
 install_polkadotjs() {
-  if [[ ! $(npm list | grep polkadot) ]]; then
+  if [[ ! -s package.json || ! $(cat package.json | grep polkadot) ]]; then
     echo "installing polkadot-js..."
     npm install @polkadot/api
   fi
