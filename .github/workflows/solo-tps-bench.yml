@@ -31,4 +31,4 @@ jobs:
           echo "not needed" > target/release/parachain-collator
           cd tests/stps && npm i @polkadot/api && cd -
 
-          ./zombienet.sh test tests/stps/solo.feature
+          ./zombienet.sh test tests/stps/relay.feature
