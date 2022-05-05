@@ -6,3 +6,6 @@ members = [
 	"node",
 	"runtime",
 ]
+exclude = [
+	"chainspec-gen"
+]
