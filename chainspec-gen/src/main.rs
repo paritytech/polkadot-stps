@@ -48,13 +48,15 @@ fn chainspec(chain: &str) -> Vec<u8> {
     output.stdout
 }
 
+const FUNDS: u64 = 10000000000000000;
+
 fn modify_chainspec(chainspec: Vec<u8>, n: usize) -> Vec<u8> {
     let mut chainspec_json: Value = serde_json::from_slice(&chainspec).unwrap();
     let mut v = Vec::new();
     for i in 0..n {
         let pair: SrPair = Pair::from_string(format!("//Sender-{}", i).as_str(), None).unwrap();
         let signer: PairSigner<DefaultConfig, SrPair> = PairSigner::new(pair);
-        let a: (String, i64) = (signer.account_id().to_string(), 10000000000000000);
+        let a: (String, u64) = (signer.account_id().to_string(), FUNDS);
         v.push(a);
     }
     let balances = serde_json::to_value(&v).unwrap();
