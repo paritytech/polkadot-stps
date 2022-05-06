@@ -50,9 +50,14 @@ const FUNDS: u64 = 10000000000000000;
 
 fn modify_chainspec(chainspec: Vec<u8>, n: usize) -> Vec<u8> {
     let mut chainspec_json: Value = serde_json::from_slice(&chainspec).unwrap();
-    
+    let name = &chainspec_json["name"];
+
+    let genesis_balances = match name.as_str().unwrap() {
+        "Rococo Local Testnet" => chainspec_json["genesis"]["runtime"]["runtime_genesis_config"]["balances"]["balances"].as_array_mut().unwrap(),
+        _ => chainspec_json["genesis"]["runtime"]["balances"]["balances"].as_array_mut().unwrap(),
+    };
+
     // Extend the genesis balances with `//Sender/i`.
-    let genesis_balances = chainspec_json["genesis"]["runtime"]["balances"]["balances"].as_array_mut().unwrap();
     for i in 0..n {
         let pair: SrPair = Pair::from_string(format!("//Sender/{}", i).as_str(), None).unwrap();
         let signer: PairSigner<DefaultConfig, SrPair> = PairSigner::new(pair);
