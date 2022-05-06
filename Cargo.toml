@@ -7,5 +7,5 @@ members = [
 	"runtime",
 ]
 exclude = [
-	"chainspec-gen"
+	"funded-accounts-json"
 ]
