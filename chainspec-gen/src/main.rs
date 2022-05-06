@@ -1,5 +1,4 @@
 use std::process::Command;
-use std::env;
 use std::fs::{self, File};
 use std::io::prelude::*;
 use std::path::PathBuf;
