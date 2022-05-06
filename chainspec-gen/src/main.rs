@@ -1,7 +1,8 @@
 use std::process::Command;
 use std::env;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::prelude::*;
+use std::path::PathBuf;
 use serde_json::{json, Value};
 use structopt::StructOpt;
 use subxt::{extrinsic::PairSigner, DefaultConfig,
@@ -17,35 +18,33 @@ struct Opt {
 
     #[structopt(short, long, possible_values(VALID_CHAINS))]
     chain: String,
+
+    /// Relative or absolute path to the Polkadot executable.
+    #[structopt(short, long, default_value = "../polkadot")]
+    polkadot_binary: PathBuf,
 }
 
 fn main() {
     let opt = Opt::from_args();
     let chain = opt.chain.as_str();
     let n = opt.n;
+    let polkadot_binary = fs::canonicalize(opt.polkadot_binary).expect("Unable to find the polkadot executable");
 
-    let chainspec = chainspec(chain);
+    let chainspec = chainspec(chain, polkadot_binary);
     let new_chainspec = modify_chainspec(chainspec, n);
 
     let mut file = File::create(format!("{}-funded.json", chain)).unwrap();
     file.write_all(&new_chainspec).unwrap();
 }
 
-fn chainspec(chain: &str) -> Vec<u8> {
-    let current_dir = env::current_dir().unwrap();
-    let mut above_dir = current_dir.clone();
-    above_dir.pop();
-
-    let polkadot_cmd = above_dir.to_str().unwrap().to_owned() + "/polkadot";
-
-    let output = Command::new(polkadot_cmd)
+fn chainspec(chain: &str, polkadot: PathBuf) -> Vec<u8> {
+    Command::new(&polkadot)
         .arg("build-spec")
         .arg("--chain")
         .arg(chain)
         .output()
-        .expect("failed to execute process");
-
-    output.stdout
+        .expect("failed to execute process")
+        .stdout
 }
 
 const FUNDS: u64 = 10000000000000000;
