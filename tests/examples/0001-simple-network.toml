@@ -6,6 +6,9 @@ default_image = "{{ZOMBIENET_INTEGRATION_TEST_IMAGE}}"
 chain = "rococo-local"
 default_command = "./polkadot"
 
+  [relaychain.genesis.runtime.runtime_genesis_config.balances]
+  {% include "./funded-accounts.json" %}
+
   [[relaychain.nodes]]
   name = "alice"
   validator = true
