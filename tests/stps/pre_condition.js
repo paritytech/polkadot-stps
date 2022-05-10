@@ -16,6 +16,7 @@ async function run(nodeName, networkInfo, args) {
 	const { wsUri, userDefinedTypes } = networkInfo.nodesByName[nodeName];
 	const api = await connect(wsUri, userDefinedTypes);
 
+	// Check all hard-coded accounts.
 	await Promise.all(MNEMONICS.map(async (menmonic) => {
 		check_account(api, menmonic, NUM_EXT);
 	}));
@@ -25,7 +26,7 @@ async function check_account(api, menmonic, NUM_EXT) {
 	let existential = api.consts.balances.existentialDeposit;
 	const keyring = new Keyring({ type: 'sr25519' });
 	const acc = keyring.addFromUri(menmonic);
-	await check_address(api, acc.address, existential);
+	await check_address(api, acc.address, existential, NUM_EXT);
 }
 
 // Checks that the address has the correct balance and nonce.

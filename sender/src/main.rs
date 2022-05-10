@@ -7,6 +7,7 @@ use subxt::{
 	PolkadotExtrinsicParamsBuilder as Params,
 	sp_core::{Pair, sr25519::Pair as SrPair}
 };
+use std::path::PathBuf;
 use std::fs::File;
 use std::io::{Write, Read};
 use serde_json::Value;
@@ -19,9 +20,9 @@ struct Cli {
 
 #[derive(clap::Subcommand)]
 enum Commands {
-	/// Generate the JSON file to be used with Zombienet
+	/// Generate the JSON file to be used with Zombienet.
 	FundAccountsJson(FundAccountsJsonArgs),
-	/// Send many balance transfers to a node
+	/// Send many `Balance::transfer_keep_alive` to a node.
 	SendBalanceTransfers(SendBalanceTransfersArgs),
 }
 
@@ -31,6 +32,14 @@ struct FundAccountsJsonArgs {
 	/// The number of accounts to fund
 	#[clap(short, default_value_t = 500000)]
 	n: usize,
+
+	/// Path to write the funded accounts to.
+	#[clap(long, short, default_value = "./funded-accounts.json")]
+	output: PathBuf,
+
+	/// Mnemonic blueprint to derive accounts with. An unique index will be appended.
+	#[clap(long, short, default_value = "//Sender/")]
+	mnemonic: String,
 }
 
 #[derive(Parser, Debug)]
@@ -40,13 +49,24 @@ struct SendBalanceTransfersArgs {
 	#[clap(long, short)]
 	node: String,
 
+	/// Number of extrinsics to send.
+	///
+	/// Defaults to the number of accounts in `funded_accounts`.
+	/// Limited by the number of accounts in the `funded_accounts` file.
+	#[clap(long, short)]
+	extrinsics: Option<usize>,
+
 	/// Chunk size for sending the extrinsics.
 	#[clap(long, short, default_value_t = 50)]
 	chunk_size: usize,
 
-	/// Path to JSON file with funded accounts
-	#[clap(long, short)]
-	funded_accounts: String,
+	/// Path to JSON file with the funded accounts.
+	#[clap(long, short, default_value = "./funded-accounts.json")]
+	funded_accounts: PathBuf,
+
+	/// Mnemonic blueprint to derive accounts with. An unique index will be appended.
+	#[clap(long, short, default_value = "//Sender/")]
+	mnemonic: String,
 }
 
 #[subxt::subxt(runtime_metadata_path = "metadata.scale")]
@@ -61,39 +81,45 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let cli = Cli::parse();
 	match &cli.command {
 		Commands::FundAccountsJson(args) => {
-			let funded_accounts_json = funded_accounts_json(args.n);
-			let mut file = File::create("funded-accounts.json").unwrap();
+			let funded_accounts_json = funded_accounts_json(&args.mnemonic, args.n);
+			let mut file = File::create(&args.output).unwrap();
 			file.write_all(&funded_accounts_json).unwrap();
+			info!("Wrote funded accounts to: {:?}", args.output);
 		},
 		Commands::SendBalanceTransfers(args) => {
+			info!("Reading funded accounts from: {:?}", &args.funded_accounts);
 			let mut file = File::open(&args.funded_accounts)?;
 			let mut json_bytes = Vec::new();
-
 			file.read_to_end(&mut json_bytes).expect("Unable to read data");
 
 			let json: Value = serde_json::from_slice(&json_bytes)?;
 			let json_array = json.as_array().unwrap();
-			let n = json_array.len(); // number of funded accounts
+			let n = args.extrinsics.unwrap_or(json_array.len());
 
-			send_funds(&args.node, args.chunk_size, n).await?;
+			if n > json_array.len() {
+				return Err(format!("Cannot send more extrinsics ({}) than accounts ({})", n, json_array.len()).into());
+			}
+
+			send_funds(&args.node, &args.mnemonic, args.chunk_size, n).await?;
 		}
 	}
 
 	Ok(())
 }
 
-const FUNDS: u64 = 10000000000000000;
+/// Initial funds for a genesis account.
+const FUNDS: u64 = 10_000_000_000_000_000;
 
-fn generate_signer(i: usize) -> PairSigner<DefaultConfig, SrPair> {
-	let pair: SrPair = Pair::from_string(format!("//Sender/{}", i).as_str(), None).unwrap();
+fn generate_signer(mnemonic_blueprint: &str, i: usize) -> PairSigner<DefaultConfig, SrPair> {
+	let pair: SrPair = Pair::from_string(format!("{}{}", mnemonic_blueprint, i).as_str(), None).unwrap();
 	let signer: PairSigner<DefaultConfig, SrPair> = PairSigner::new(pair);
 	signer
 }
 
-fn funded_accounts_json(n: usize) -> Vec<u8> {
+fn funded_accounts_json(mnemonic_blueprint: &str, n: usize) -> Vec<u8> {
 	let mut v = Vec::new();
 	for i in 0..n {
-		let signer = generate_signer(i);
+		let signer = generate_signer(mnemonic_blueprint, i);
 		let a: (String, u64) = (signer.account_id().to_string(), FUNDS);
 		v.push(a);
 	}
@@ -102,7 +128,7 @@ fn funded_accounts_json(n: usize) -> Vec<u8> {
 	serde_json::to_vec_pretty(&v_json).unwrap()
 }
 
-async fn send_funds(node: &String, chunk_size: usize, n: usize) -> Result<(), Box<dyn std::error::Error>> {
+async fn send_funds(node: &String, mnemonic: &str, chunk_size: usize, n: usize) -> Result<(), Box<dyn std::error::Error>> {
 	let receivers = generate_receivers(n); // one receiver per sender
 
 	let api = ClientBuilder::new()
@@ -117,7 +143,7 @@ async fn send_funds(node: &String, chunk_size: usize, n: usize) -> Result<(), Bo
 	info!("Signing {} transactions", n);
 	let mut txs = Vec::new();
 	for i in 0..n {
-		let signer = generate_signer(i);
+		let signer = generate_signer(mnemonic, i);
 		let tx_params = Params::new().era(Era::Immortal, *api.client.genesis());
 		let tx = api
 			.tx()

@@ -6,14 +6,14 @@
 Network: ./relay.toml
 Creds: config
 
-alice: is up
-#bob: is up
+alice: is up within 600 secs
+#bob: is up within 600 secs
 
 # Initialization
 alice: js-script ./pre_condition.js with "16384"
 
 # The RPC sometimes hangs in the beginning, hopefully this fixes it.
-alice: reports block height is at least 4 within 60 seconds
+alice: reports block height is at least 1 within 60 seconds
 
 # Sending the extrinsics
 alice: js-script ./transfer_keep_alive.js with "16384" within 600 secs

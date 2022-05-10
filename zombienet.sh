@@ -2,7 +2,7 @@
 
 set -e
 
-POLKADOT_V=v0.9.17-rc4
+POLKADOT_V=v0.9.20
 ZOMBIENET_V=v1.2.32
 
 print_help() {
