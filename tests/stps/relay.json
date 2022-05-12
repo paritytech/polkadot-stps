@@ -1,0 +1,37 @@
+{
+    "settings": {
+      "timeout": 1000,
+      "node_spawn_timeout": 1200
+    },
+    "relaychain": {
+      "default_image": "{{ZOMBIENET_INTEGRATION_TEST_IMAGE}}",
+      "chain": "rococo-local",
+      "default_command": "./polkadot",
+      "genesis": {
+        "runtime": {
+          "runtime_genesis_config": {
+            "balances": {
+              "balances": {% include "./funded-accounts.json" %}
+            }
+          }
+        }
+      },
+      "nodes": [
+        {
+          "name": "alice",
+          "validator": true,
+          "extra_args": [
+            "--alice",
+            "-lparachain=debug"
+          ]
+        }
+      ]
+    },
+    "types": {
+      "Header": {
+        "number": "u64",
+        "parent_hash": "Hash",
+        "post_state": "Hash"
+      }
+    }
+  }

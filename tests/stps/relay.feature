@@ -3,7 +3,7 @@
 # The number of extrinsics is set to 16384 but can be increased
 # for a real results.
 
-Network: ./relay.toml
+Network: ./relay.json
 Creds: config
 
 alice: is up within 600 secs
@@ -19,7 +19,7 @@ alice: reports block height is at least 1 within 60 seconds
 alice: js-script ./transfer_keep_alive.js with "16384" within 600 secs
 
 # Verification
-alice: js-script ./wait_for_events.js with "16384" within 180 secs
+alice: js-script ./wait_for_events.js with "16384" within 600 secs
 
 # Calculate TPS.
 # TODO return the TPS and assert its value.
