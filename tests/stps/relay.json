@@ -20,12 +20,11 @@
         {
           "name": "alice",
           "validator": true,
-          "extra_args": [
+          "args": [
             "--alice",
             "-lparachain=debug",
             "--pool-limit=1000000000",
-            "--pool-kbytes=10000000000",
-            "--rpc-max-payload=16777216"
+            "--pool-kbytes=10000000000"
           ]
         }
       ]
