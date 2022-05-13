@@ -2,8 +2,8 @@
 
 set -e
 
-POLKADOT_V=v0.9.20
-ZOMBIENET_V=v1.2.32
+POLKADOT_V=v0.9.21
+ZOMBIENET_V=v1.2.33
 
 print_help() {
   echo "🧟 Zombienet - Polkadot Ecosystem Performance Benchmarks 🦾"
