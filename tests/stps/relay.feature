@@ -18,6 +18,9 @@ alice: reports block height is at least 1 within 60 seconds
 # Sending the extrinsics
 alice: js-script ./transfer_keep_alive.js with "16384" within 600 secs
 
+# wait for block finalization
+sleep 60 secs
+
 # Verification
 alice: js-script ./wait_for_events.js with "16384" within 600 secs
 
