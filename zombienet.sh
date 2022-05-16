@@ -1,7 +1,9 @@
 #!/bin/bash
 
-POLKADOT_V=v0.9.17-rc4
-ZOMBIENET_V=v1.2.32
+set -e
+
+POLKADOT_V=v0.9.21
+ZOMBIENET_V=v1.2.33
 
 print_help() {
   echo "🧟 Zombienet - Polkadot Ecosystem Performance Benchmarks 🦾"
@@ -33,7 +35,7 @@ fetch_polkadot() {
 }
 
 install_polkadotjs() {
-  if [[ ! $(npm list | grep polkadot) ]]; then
+  if [[ $(node -e "require('@polkadot/api1')" &> /dev/null; echo $?) -gt 0 ]]; then
     echo "installing polkadot-js..."
     npm install @polkadot/api
   fi
