@@ -69,11 +69,13 @@ build_collator() {
 
 zombienet_test() {
   zombienet_init
+  export PATH=.:$PATH
   ./zombienet-linux test --provider native $1
 }
 
 zombienet_spawn() {
   zombienet_init
+  export PATH=.:$PATH
   ./zombienet-linux spawn --provider native $1
 }
 
