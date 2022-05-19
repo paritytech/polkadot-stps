@@ -10,16 +10,13 @@ async function run(nodeName, networkInfo, jsArgs) {
         let cargoArgs;
         switch(cmd) {
             case "check_pre_conditions":
-                const preConditionsAccountsN = jsArgs[1];
-                cargoArgs = ['r', '--quiet', '--release', '--manifest-path', 'utils/Cargo.toml', '--', 'check-pre-conditions', '--node', wsUri, '-n', preConditionsAccountsN];
+                cargoArgs = ['r', '--quiet', '--release', '--manifest-path', 'utils/Cargo.toml', '--', 'check-pre-conditions', '--node', wsUri];
                 break;
             case "send_balance_transfers":
-                const balanceTransfersN = jsArgs[1];
-                cargoArgs = ['r', '--quiet', '--release', '--manifest-path', 'utils/Cargo.toml', '--', 'send-balance-transfers', '--funded-accounts', 'tests/examples/funded-accounts.json', '--node', wsUri, '--extrinsics', balanceTransfersN];
+                cargoArgs = ['r', '--quiet', '--release', '--manifest-path', 'utils/Cargo.toml', '--', 'send-balance-transfers', '--node', wsUri];
                 break;
             case "calculate_tps":
-                const tpsN = jsArgs[1];
-                cargoArgs = ['r', '--quiet', '--release', '--manifest-path', 'utils/Cargo.toml', '--', 'calculate-tps', '--node', wsUri, '-n', tpsN];
+                cargoArgs = ['r', '--quiet', '--release', '--manifest-path', 'utils/Cargo.toml', '--', 'calculate-tps', '--node', wsUri];
                 break;
             default:
                 throw new Error();
