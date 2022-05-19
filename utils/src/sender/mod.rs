@@ -28,11 +28,6 @@ async fn wait_for_events(node: String, n: usize) -> Result<(), Box<dyn std::erro
 		let finalized_block_header = b.unwrap();
 		let finalized_block_number = finalized_block_header.number;
 
-		if finalized_block_number <= last_checked_block_number {
-			warn!("Ignored past block: {finalized_block_number}");
-			continue
-		}
-
 		for i in last_checked_block_number..finalized_block_number {
 			let block_hash = api.client.rpc().block_hash(Some(i.into())).await?.unwrap();
 
