@@ -49,9 +49,12 @@ async fn wait_for_events(node: String, n: usize) -> Result<(), Box<dyn std::erro
 		last_checked_block_number = finalized_block_number;
 
 		if balance_transfer_count >= n {
-            info!("Found {} transfer events, need {} more", balance_transfer_count, n - balance_transfer_count);
+            info!("Found all {} transfer events", balance_transfer_count);
 			break
 		}
+        if balance_transfer_count > 0 {
+            info!("Found {} transfer events, need {} more", balance_transfer_count, n - balance_transfer_count);
+        }
 	}
 
 	Ok(())
