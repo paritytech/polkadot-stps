@@ -1,13 +1,15 @@
 use clap::Parser;
 use log::*;
-use std::path::PathBuf;
-use std::fs::File;
-use std::io::{Write, Read};
 use serde_json::Value;
+use std::{
+	fs::File,
+	io::{Read, Write},
+	path::PathBuf,
+};
 
+mod funder;
 mod pre;
 mod sender;
-mod funder;
 mod tps;
 
 #[derive(Parser)]
@@ -127,7 +129,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 			let n = args.extrinsics.unwrap_or(json_array.len());
 
 			if n > json_array.len() {
-				return Err(format!("Cannot send more extrinsics ({}) than accounts ({})", n, json_array.len()).into());
+				return Err(format!(
+					"Cannot send more extrinsics ({}) than accounts ({})",
+					n,
+					json_array.len()
+				)
+				.into())
 			}
 
 			sender::send_funds(&args.node, &args.derivation, args.chunk_size, n).await?;
@@ -139,9 +146,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		Commands::CalculateTPS(args) => {
 			info!("Calculating TPS on finalized blocks.");
 			tps::calc_tps(&args.node, args.n).await?;
-		}
+		},
 	}
 
 	Ok(())
 }
-
