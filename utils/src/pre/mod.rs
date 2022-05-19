@@ -17,14 +17,14 @@ pub async fn pre_conditions(
 	let signer_0: PairSigner<DefaultConfig, SrPair> = PairSigner::new(pair_0);
 	let account_0 = signer_0.account_id();
 
-	check_account(node, account_0).await?;
+	check_account(node, account_0, n).await?;
 
 	let pair_n: SrPair =
 		Pair::from_string(format!("{}{}", derivation, n - 1).as_str(), None).unwrap();
 	let signer_n: PairSigner<DefaultConfig, SrPair> = PairSigner::new(pair_n);
 	let account_n = signer_n.account_id();
 
-	check_account(node, account_n).await?;
+	check_account(node, account_n, n).await?;
 
 	Ok(())
 }
@@ -33,6 +33,7 @@ pub async fn pre_conditions(
 async fn check_account(
 	node: &String,
 	account: &AccountId32,
+    n: usize,
 ) -> Result<(), Box<dyn std::error::Error>> {
 	let api = ClientBuilder::new()
 		.set_url(node)
@@ -42,6 +43,7 @@ async fn check_account(
 		);
 
 	let ext_deposit = api.constants().balances().existential_deposit().unwrap();
+    let min_deposit = (ext_deposit * n as u128) as f32 * 1.1 /* 10% for fees */;
 
 	let genesis = 0u32;
 
@@ -53,7 +55,7 @@ async fn check_account(
 		panic!("Account has non-zero nonce");
 	}
 
-	if (account_state.data.free as f32) < ext_deposit as f32 * 1.1 {
+	if (account_state.data.free as f32) < min_deposit {
 		// 10% for fees
 		panic!("Account has insufficient funds");
 	}

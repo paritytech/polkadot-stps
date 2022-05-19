@@ -11,7 +11,7 @@ use subxt::{
 #[subxt::subxt(runtime_metadata_path = "metadata.scale")]
 pub mod runtime {}
 
-async fn watch_blocks(node: &String, n: usize) -> Result<(), Box<dyn std::error::Error>> {
+async fn wait_for_events(node: String, n: usize) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 	let api = ClientBuilder::new()
 		.set_url(node)
 		.build()
@@ -28,24 +28,28 @@ async fn watch_blocks(node: &String, n: usize) -> Result<(), Box<dyn std::error:
 		let finalized_block_header = b.unwrap();
 		let finalized_block_number = finalized_block_header.number;
 
-		if finalized_block_number > last_checked_block_number {
-			for i in last_checked_block_number..finalized_block_number {
-				let block_hash = api.client.rpc().block_hash(Some(i.into())).await?.unwrap();
+		if finalized_block_number <= last_checked_block_number {
+			warn!("Ignored past block: {finalized_block_number}");
+			continue
+		}
 
-				let events = api.events().at(block_hash).await?;
-				for e in events.iter_raw() {
-					if let Ok(raw_event) = e {
-						if raw_event.pallet == "Balances" && raw_event.variant == "Transfer" {
-							balance_transfer_count = balance_transfer_count + 1;
-						}
+		for i in last_checked_block_number..finalized_block_number {
+			let block_hash = api.client.rpc().block_hash(Some(i.into())).await?.unwrap();
+
+			let events = api.events().at(block_hash).await?;
+			for e in events.iter_raw() {
+				if let Ok(raw_event) = e {
+					if raw_event.pallet == "Balances" && raw_event.variant == "Transfer" {
+						balance_transfer_count = balance_transfer_count + 1;
 					}
 				}
 			}
-
-			last_checked_block_number = finalized_block_number;
 		}
 
+		last_checked_block_number = finalized_block_number;
+
 		if balance_transfer_count >= n {
+            info!("Found {} transfer events, need {} more", balance_transfer_count, n - balance_transfer_count);
 			break
 		}
 	}
@@ -54,20 +58,15 @@ async fn watch_blocks(node: &String, n: usize) -> Result<(), Box<dyn std::error:
 }
 
 pub async fn send_funds(
-	node: &String,
+	node: String,
 	derivation: &str,
 	chunk_size: usize,
 	n: usize,
 ) -> Result<(), Box<dyn std::error::Error>> {
-	// todo: spawn thread
-	// let watch_blocks = task::spawn(async {
-	//     watch_blocks(node, n).await?;
-	// });
-
 	let receivers = generate_receivers(n); // one receiver per sender
 
 	let api = ClientBuilder::new()
-		.set_url(node)
+		.set_url(node.clone())
 		.build()
 		.await?
 		.to_runtime_api::<runtime::RuntimeApi<DefaultConfig, PolkadotExtrinsicParams<DefaultConfig>>>(
@@ -88,6 +87,11 @@ pub async fn send_funds(
 			.await?;
 		txs.push(tx);
 	}
+
+    // Start a second thread to listen for `Transfer` events.
+    let wait_for_events = tokio::task::spawn(async move {
+	    wait_for_events(node, n).await
+	});
 
 	info!("Sending {} transactions in chunks of {}", n, chunk_size);
 	let mut i = 0;
@@ -116,11 +120,10 @@ pub async fn send_funds(
 	let rate = n as f64 / start.elapsed().as_secs_f64();
 	info!("{} txs sent in {} ms ({:.2} /s)", n, start.elapsed().as_millis(), rate);
 
-	// todo: await spawned thread
-	// watch_blocks.await;
-	watch_blocks(node, n).await?;
-
-	Ok(())
+    // Wait until all `Transfer` events were received.
+    // Any timeout can be handled by the Zombienet DSL.
+	wait_for_events.await?.map_err(|e| format!("Failed to wait for events: {:?}", e))?;
+    Ok(())
 }
 
 pub fn generate_signer(derivation_blueprint: &str, i: usize) -> PairSigner<DefaultConfig, SrPair> {

@@ -111,7 +111,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	);
 
 	let cli = Cli::parse();
-	match &cli.command {
+	match cli.command {
 		Commands::FundAccountsJson(args) => {
 			let funded_accounts_json = funder::funded_accounts_json(&args.derivation, args.n);
 			let mut file = File::create(&args.output).unwrap();
@@ -137,7 +137,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 				.into())
 			}
 
-			sender::send_funds(&args.node, &args.derivation, args.chunk_size, n).await?;
+			sender::send_funds(args.node, &args.derivation, args.chunk_size, n).await?;
 		},
 		Commands::CheckPreConditions(args) => {
 			info!("Checking sTPS pre-conditions (account nonces and free balances).");
