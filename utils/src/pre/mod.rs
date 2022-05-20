@@ -52,7 +52,9 @@ async fn check_account(
 		panic!("Account has non-zero nonce");
 	}
 
-	if (account_state.data.free as f32) < ext_deposit as f32 * 1.1 /* 10% for fees */ {
+	if (account_state.data.free as f32) < ext_deposit as f32 * 1.1
+	/* 10% for fees */
+	{
 		// 10% for fees
 		panic!("Account has insufficient funds");
 	}

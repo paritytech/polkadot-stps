@@ -11,7 +11,10 @@ use subxt::{
 #[subxt::subxt(runtime_metadata_path = "metadata.scale")]
 pub mod runtime {}
 
-async fn wait_for_events(node: String, n: usize) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn wait_for_events(
+	node: String,
+	n: usize,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 	let api = ClientBuilder::new()
 		.set_url(node)
 		.build()
@@ -44,12 +47,16 @@ async fn wait_for_events(node: String, n: usize) -> Result<(), Box<dyn std::erro
 		last_checked_block_number = finalized_block_number;
 
 		if balance_transfer_count >= n {
-            info!("Found all {} transfer events", balance_transfer_count);
+			info!("Found all {} transfer events", balance_transfer_count);
 			break
 		}
-        if balance_transfer_count > 0 {
-            info!("Found {} transfer events, need {} more", balance_transfer_count, n - balance_transfer_count);
-        }
+		if balance_transfer_count > 0 {
+			info!(
+				"Found {} transfer events, need {} more",
+				balance_transfer_count,
+				n - balance_transfer_count
+			);
+		}
 	}
 
 	Ok(())
@@ -86,10 +93,8 @@ pub async fn send_funds(
 		txs.push(tx);
 	}
 
-    // Start a second thread to listen for `Transfer` events.
-    let wait_for_events = tokio::task::spawn(async move {
-	    wait_for_events(node, n).await
-	});
+	// Start a second thread to listen for `Transfer` events.
+	let wait_for_events = tokio::task::spawn(async move { wait_for_events(node, n).await });
 
 	info!("Sending {} transactions in chunks of {}", n, chunk_size);
 	let mut i = 0;
@@ -118,10 +123,12 @@ pub async fn send_funds(
 	let rate = n as f64 / start.elapsed().as_secs_f64();
 	info!("{} txs sent in {} ms ({:.2} /s)", n, start.elapsed().as_millis(), rate);
 
-    // Wait until all `Transfer` events were received.
-    // Any timeout can be handled by the Zombienet DSL.
-	wait_for_events.await?.map_err(|e| format!("Failed to wait for events: {:?}", e))?;
-    Ok(())
+	// Wait until all `Transfer` events were received.
+	// Any timeout can be handled by the Zombienet DSL.
+	wait_for_events
+		.await?
+		.map_err(|e| format!("Failed to wait for events: {:?}", e))?;
+	Ok(())
 }
 
 pub fn generate_signer(derivation_blueprint: &str, i: usize) -> PairSigner<DefaultConfig, SrPair> {

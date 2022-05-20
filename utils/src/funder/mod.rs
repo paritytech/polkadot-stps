@@ -1,9 +1,13 @@
+use serde_json::Value;
+use std::{
+	fs::File,
+	io::{Read, Write},
+	path::PathBuf,
+};
 use subxt::{
 	sp_core::{sr25519::Pair as SrPair, Pair},
 	DefaultConfig, PairSigner,
 };
-use serde_json::Value;
-use std::{fs::File, path::PathBuf, io::{Read, Write}};
 
 /// Initial funds for a genesis account.
 const FUNDS: u64 = 10_000_000_000_000_000;
