@@ -7,6 +7,6 @@ members = [
 	"runtime",
 ]
 exclude = [
-	"sender",
+	"utils",
 	"funded-accounts-json"
 ]
