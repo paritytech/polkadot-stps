@@ -42,6 +42,10 @@ struct FundAccountsJsonArgs {
 	/// Derivation blueprint to derive accounts with. An unique index will be appended.
 	#[clap(long, short, default_value = DEFAULT_DERIVATION)]
 	derivation: String,
+
+	/// Number of threads to derive accounts with.
+	#[clap(long, short, default_value = "4")]
+	threads: usize,
 }
 
 #[derive(Parser, Debug)]
@@ -104,7 +108,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let cli = Cli::parse();
 	match cli.command {
 		Commands::FundAccountsJson(args) => {
-			funder::funded_accounts_json(&args.derivation, args.n, args.output.clone());
+			funder::funded_accounts_json(&args.derivation, args.n, &args.output, args.threads)
+				.await?;
 			info!("Wrote funded accounts to: {:?}", args.output);
 		},
 		Commands::SendBalanceTransfers(args) => {
