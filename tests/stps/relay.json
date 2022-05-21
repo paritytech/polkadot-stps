@@ -19,7 +19,7 @@
       "nodes": [
         {
           "name": "alice",
-          "validator": true,
+          "validator": false,
           "args": [
             "--alice",
             "-lparachain=debug",
@@ -27,6 +27,17 @@
             "--pool-kbytes=10000000000"
           ]
         }
+      ],
+      "node_groups": [
+	      {
+          "name": "stps",
+          "args": [
+            "-lparachain=debug",
+            "--pool-limit=1000000000",
+            "--pool-kbytes=10000000000"
+          ],
+	       "count": 3
+	      }
       ]
     },
     "types": {

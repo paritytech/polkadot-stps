@@ -1,7 +1,7 @@
 const { spawn, ChildProcess } = require('child_process');
 
 async function run(nodeName, networkInfo, jsArgs) {
-    const {wsUri, userDefinedTypes} = networkInfo.nodesByName[nodeName];
+    const {wsUri} = networkInfo.nodesByName[nodeName];
     const cmd = jsArgs[0];
 
     return new Promise((resolve, _reject) => {
@@ -22,20 +22,20 @@ async function run(nodeName, networkInfo, jsArgs) {
                 throw new Error();
         }
 
-        const ls = spawn('cargo', cargoArgs);
+        const p = spawn('cargo', cargoArgs);
 
-        ls.stdout.on('data', (data) => {
+        p.stdout.on('data', (data) => {
             process.stdout.write(data);
         });
 
-        ls.stderr.on('data', (data) => {
+        p.stderr.on('data', (data) => {
             process.stdout.write(data);
         });
 
-        ls.on('close', (code) => {
+        p.on('close', (code) => {
             console.log(`rust process exited with code ${code}`);
         });
-        ls.on('exit', resolve);
+        p.on('exit', resolve);
     });
 
     return 0;
