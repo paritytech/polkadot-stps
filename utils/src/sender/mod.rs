@@ -64,11 +64,12 @@ async fn wait_for_events(
 
 pub async fn send_funds(
 	node: String,
+	node_index: usize,
 	derivation: &str,
 	chunk_size: usize,
 	n: usize,
 ) -> Result<(), Box<dyn std::error::Error>> {
-	let receivers = generate_receivers(n); // one receiver per sender
+	let receivers = generate_receivers(n, node_index); // one receiver per sender
 
 	let api = ClientBuilder::new()
 		.set_url(node.clone())
@@ -79,10 +80,11 @@ pub async fn send_funds(
 
 	let ext_deposit = api.constants().balances().existential_deposit().unwrap();
 
-	info!("Signing {} transactions", n);
+	info!("Node {}: signing {} transactions", node_index, n);
 	let mut txs = Vec::new();
 	for i in 0..n {
-		let signer = generate_signer(derivation, i);
+		let shift = node_index * n;
+		let signer = generate_signer(derivation, shift + i);
 		let tx_params = Params::new().era(Era::Immortal, *api.client.genesis());
 		let tx = api
 			.tx()
@@ -96,7 +98,7 @@ pub async fn send_funds(
 	// Start a second thread to listen for `Transfer` events.
 	let wait_for_events = tokio::task::spawn(async move { wait_for_events(node, n).await });
 
-	info!("Sending {} transactions in chunks of {}", n, chunk_size);
+	info!("Node {}: sending {} transactions in chunks of {}", node_index, n, chunk_size);
 	let mut i = 0;
 	let mut last_now = std::time::Instant::now();
 	let mut last_sent = 0;
@@ -114,14 +116,14 @@ pub async fn send_funds(
 		if elapsed >= std::time::Duration::from_secs(1) {
 			let sent = i * chunk_size - last_sent;
 			let rate = sent as f64 / elapsed.as_secs_f64();
-			info!("{} txs sent in {} ms ({:.2} /s)", sent, elapsed.as_millis(), rate);
+			info!("Node {}: {} txs sent in {} ms ({:.2} /s)", node_index, sent, elapsed.as_millis(), rate);
 			last_now = std::time::Instant::now();
 			last_sent = i * chunk_size;
 		}
 		i += 1;
 	}
 	let rate = n as f64 / start.elapsed().as_secs_f64();
-	info!("{} txs sent in {} ms ({:.2} /s)", n, start.elapsed().as_millis(), rate);
+	info!("Node {}: {} txs sent in {} ms ({:.2} /s)", node_index, n, start.elapsed().as_millis(), rate);
 
 	// Wait until all `Transfer` events were received.
 	// Any timeout can be handled by the Zombienet DSL.
@@ -139,11 +141,12 @@ pub fn generate_signer(derivation_blueprint: &str, i: usize) -> PairSigner<Defau
 }
 
 /// Generates a vector of account IDs.
-fn generate_receivers(num: usize) -> Vec<subxt::sp_core::crypto::AccountId32> {
+fn generate_receivers(n: usize, node_index: usize) -> Vec<subxt::sp_core::crypto::AccountId32> {
+	let shift = node_index * n;
 	let mut receivers = Vec::new();
-	for i in 0..num {
+	for i in 0..n {
 		// Decode the account ID from the string:
-		let account_id = Decode::decode(&mut &format!("{:0>32?}", i).as_bytes()[..])
+		let account_id = Decode::decode(&mut &format!("{:0>32?}", shift + i).as_bytes()[..])
 			.expect("Must decode account ID");
 		receivers.push(account_id);
 	}

@@ -3,6 +3,7 @@ const { spawn, ChildProcess } = require('child_process');
 async function run(nodeName, networkInfo, jsArgs) {
     const {wsUri} = networkInfo.nodesByName[nodeName];
     const cmd = jsArgs[0];
+    const nodeIndex = nodeName.split("-")[1];
 
     return new Promise((resolve, _reject) => {
         const { spawn, ChildProcess } = require('child_process');
@@ -10,13 +11,15 @@ async function run(nodeName, networkInfo, jsArgs) {
         let cargoArgs;
         switch(cmd) {
             case "check_pre_conditions":
-                cargoArgs = ['r', '--quiet', '--release', '--manifest-path', 'utils/Cargo.toml', '--', 'check-pre-conditions', '--node', wsUri];
+                cargoArgs = ['r', '--quiet', '--release', '--manifest-path', 'utils/Cargo.toml', '--', 'check-pre-conditions', '--node-url', wsUri];
                 break;
             case "send_balance_transfers":
-                cargoArgs = ['r', '--quiet', '--release', '--manifest-path', 'utils/Cargo.toml', '--', 'send-balance-transfers', '--node', wsUri];
+                const totalNodesSender = jsArgs[1];
+                cargoArgs = ['r', '--quiet', '--release', '--manifest-path', 'utils/Cargo.toml', '--', 'send-balance-transfers', '--node-url', wsUri, '--node-index', nodeIndex, '--total-nodes', totalNodesSender];
                 break;
             case "calculate_tps":
-                cargoArgs = ['r', '--quiet', '--release', '--manifest-path', 'utils/Cargo.toml', '--', 'calculate-tps', '--node', wsUri];
+                const totalNodesTPS = jsArgs[1];
+                cargoArgs = ['r', '--quiet', '--release', '--manifest-path', 'utils/Cargo.toml', '--', 'calculate-tps', '--node-url', wsUri, '--total-nodes', totalNodesTPS];
                 break;
             default:
                 throw new Error();

@@ -53,7 +53,15 @@ struct FundAccountsJsonArgs {
 struct SendBalanceTransfersArgs {
 	/// The node to connect to.
 	#[clap(long, short)]
-	node: String,
+	node_url: String,
+
+	/// Node index.
+	#[clap(long, short)]
+	node_index: usize,
+
+	/// Total number of nodes
+	#[clap(long, short)]
+	total_nodes: usize,
 
 	/// Chunk size for sending the extrinsics.
 	#[clap(long, short, default_value_t = 50)]
@@ -73,7 +81,7 @@ struct SendBalanceTransfersArgs {
 struct CheckPreConditionsArgs {
 	/// The node to connect to.
 	#[clap(long)]
-	node: String,
+	node_url: String,
 
 	/// derivation blueprint to derive accounts with. An unique index will be appended.
 	#[clap(long, short, default_value = DEFAULT_DERIVATION)]
@@ -89,7 +97,11 @@ struct CheckPreConditionsArgs {
 struct CalculateTPSArgs {
 	/// The node to connect to.
 	#[clap(long)]
-	node: String,
+	node_url: String,
+
+	/// Total number of nodes
+	#[clap(long, short)]
+	total_nodes: usize,
 
 	/// Path to JSON file with the funded accounts.
 	#[clap(long, short, default_value = DEFAULT_FUNDED_JSON_PATH)]
@@ -113,19 +125,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 			info!("Wrote funded accounts to: {:?}", args.output);
 		},
 		Commands::SendBalanceTransfers(args) => {
-			info!("Reading funded accounts from: {:?}", &args.funded_accounts);
-			let n = funder::n_accounts(&args.funded_accounts);
-			sender::send_funds(args.node, &args.derivation, args.chunk_size, n).await?;
+			info!("Node {}: Reading funded accounts from: {:?}", args.node_index, &args.funded_accounts);
+			let n_accounts = funder::n_accounts(&args.funded_accounts);
+			let n_transactions = n_accounts / &args.total_nodes;
+
+			sender::send_funds(args.node_url, args.node_index, &args.derivation, args.chunk_size, n_transactions).await?;
 		},
 		Commands::CheckPreConditions(args) => {
 			info!("Checking sTPS pre-conditions (account nonces and free balances).");
 			let n = funder::n_accounts(&args.funded_accounts);
-			pre::pre_conditions(&args.node, &args.derivation, n).await?;
+			pre::pre_conditions(&args.node_url, &args.derivation, n).await?;
 		},
 		Commands::CalculateTPS(args) => {
 			info!("Calculating TPS on finalized blocks.");
-			let n = funder::n_accounts(&args.funded_accounts);
-			tps::calc_tps(&args.node, n).await?;
+			let n_accounts = funder::n_accounts(&args.funded_accounts);
+			let n_transactions = n_accounts / &args.total_nodes;
+
+			// sender truncates, so we need to truncate here as well
+			let n_accounts_truncated = n_transactions * &args.total_nodes;
+
+			tps::calc_tps(&args.node_url, n_accounts_truncated).await?;
 		},
 	}
 
