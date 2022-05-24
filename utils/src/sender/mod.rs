@@ -13,6 +13,7 @@ pub mod runtime {}
 
 async fn wait_for_events(
 	node: String,
+	node_index: usize,
 	n: usize,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 	let api = ClientBuilder::new()
@@ -47,12 +48,13 @@ async fn wait_for_events(
 		last_checked_block_number = finalized_block_number;
 
 		if balance_transfer_count >= n {
-			info!("Found all {} transfer events", balance_transfer_count);
+			info!("Node {}: Found all {} transfer events", node_index, balance_transfer_count);
 			break
 		}
 		if balance_transfer_count > 0 {
 			info!(
-				"Found {} transfer events, need {} more",
+				"Node {}: Found {} transfer events, need {} more",
+				node_index,
 				balance_transfer_count,
 				n - balance_transfer_count
 			);
@@ -67,9 +69,10 @@ pub async fn send_funds(
 	node_index: usize,
 	derivation: &str,
 	chunk_size: usize,
-	n: usize,
+	n_tx_sender: usize,
+	n_accounts_truncated: usize,
 ) -> Result<(), Box<dyn std::error::Error>> {
-	let receivers = generate_receivers(n, node_index); // one receiver per sender
+	let receivers = generate_receivers(n_tx_sender, node_index); // one receiver per sender
 
 	let api = ClientBuilder::new()
 		.set_url(node.clone())
@@ -80,10 +83,10 @@ pub async fn send_funds(
 
 	let ext_deposit = api.constants().balances().existential_deposit().unwrap();
 
-	info!("Node {}: signing {} transactions", node_index, n);
+	info!("Node {}: signing {} transactions", node_index, n_tx_sender);
 	let mut txs = Vec::new();
-	for i in 0..n {
-		let shift = node_index * n;
+	for i in 0..n_tx_sender {
+		let shift = node_index * n_tx_sender;
 		let signer = generate_signer(derivation, shift + i);
 		let tx_params = Params::new().era(Era::Immortal, *api.client.genesis());
 		let tx = api
@@ -96,9 +99,9 @@ pub async fn send_funds(
 	}
 
 	// Start a second thread to listen for `Transfer` events.
-	let wait_for_events = tokio::task::spawn(async move { wait_for_events(node, n).await });
+	let wait_for_events = tokio::task::spawn(async move { wait_for_events(node, node_index, n_accounts_truncated).await });
 
-	info!("Node {}: sending {} transactions in chunks of {}", node_index, n, chunk_size);
+	info!("Node {}: sending {} transactions in chunks of {}", node_index, n_tx_sender, chunk_size);
 	let mut i = 0;
 	let mut last_now = std::time::Instant::now();
 	let mut last_sent = 0;
@@ -122,8 +125,8 @@ pub async fn send_funds(
 		}
 		i += 1;
 	}
-	let rate = n as f64 / start.elapsed().as_secs_f64();
-	info!("Node {}: {} txs sent in {} ms ({:.2} /s)", node_index, n, start.elapsed().as_millis(), rate);
+	let rate = n_tx_sender as f64 / start.elapsed().as_secs_f64();
+	info!("Node {}: {} txs sent in {} ms ({:.2} /s)", node_index, n_tx_sender, start.elapsed().as_millis(), rate);
 
 	// Wait until all `Transfer` events were received.
 	// Any timeout can be handled by the Zombienet DSL.

@@ -129,7 +129,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 			let n_accounts = funder::n_accounts(&args.funded_accounts);
 			let n_transactions = n_accounts / &args.total_nodes;
 
-			sender::send_funds(args.node_url, args.node_index, &args.derivation, args.chunk_size, n_transactions).await?;
+			// we need to truncate so that all nodes receive an equal amount of transactions
+			let n_accounts_truncated = n_transactions * &args.total_nodes;
+
+			sender::send_funds(args.node_url, args.node_index, &args.derivation, args.chunk_size, n_transactions, n_accounts_truncated).await?;
 		},
 		Commands::CheckPreConditions(args) => {
 			info!("Checking sTPS pre-conditions (account nonces and free balances).");
