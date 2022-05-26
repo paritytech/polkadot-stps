@@ -86,7 +86,7 @@ zombienet_init() {
   # todo: init_gcloud
   fetch_zombienet
   fetch_polkadot
-  build_collator
+  # build_collator
 }
 
 subcommand=$1
