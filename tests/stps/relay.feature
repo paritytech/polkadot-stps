@@ -10,7 +10,7 @@ alice: is up within 600 secs
 alice: js-script ./utils.js with "check_pre_conditions" return is 0 within 600 secs
 
 # Sending the extrinsics
-stps: js-script ./utils.js with "send_balance_transfers,3" return is 0 within 600 secs
+stps: js-script ./utils.js with "send_balance_transfers,3" return is 0 within 1200 secs
 
 # Calculate TPS.
 # TODO return the TPS and assert its value.
