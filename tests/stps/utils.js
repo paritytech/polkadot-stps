@@ -6,8 +6,6 @@ async function run(nodeName, networkInfo, jsArgs) {
     let nodeIndex = nodeName.split("-")[1];
 
     return new Promise((resolve, _reject) => {
-        const { spawn, ChildProcess } = require('child_process');
-
         let cargoArgs;
         switch(cmd) {
             case "check_pre_conditions":
@@ -43,10 +41,10 @@ async function run(nodeName, networkInfo, jsArgs) {
         p.on('close', (code) => {
             console.log(`rust process exited with code ${code}`);
         });
-        p.on('exit', resolve);
+        p.on('exit', (code) => {
+            resolve(code);
+        })
     });
-
-    return 0;
 }
 
 module.exports = { run }
