@@ -87,7 +87,8 @@ pub async fn send_funds(
 	let mut txs = Vec::new();
 	for i in 0..n_tx_sender {
 		let shift = node_index * n_tx_sender;
-		let signer = generate_signer(derivation, shift + i);
+		let mut signer = generate_signer(derivation, shift + i);
+		signer.set_nonce(0); // We only use every account once.
 		let tx_params = Params::new().era(Era::Immortal, *api.client.genesis());
 		let tx = api
 			.tx()
