@@ -4,15 +4,10 @@ use subxt::{
 	ClientBuilder, DefaultConfig, PairSigner, PolkadotExtrinsicParams,
 };
 
-#[subxt::subxt(runtime_metadata_path = "metadata.scale")]
-pub mod runtime {}
+use crate::shared::{connect, Error, API};
 
 /// Check first and last accounts
-pub async fn pre_conditions(
-	node: &String,
-	derivation: &str,
-	n: usize,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn pre_conditions(node: &str, derivation: &str, n: usize) -> Result<(), Error> {
 	let pair_0: SrPair = Pair::from_string(format!("{}{}", derivation, 0).as_str(), None).unwrap();
 	let signer_0: PairSigner<DefaultConfig, SrPair> = PairSigner::new(pair_0);
 	let account_0 = signer_0.account_id();
@@ -30,16 +25,8 @@ pub async fn pre_conditions(
 }
 
 /// Check account nonce and free balance
-async fn check_account(
-	node: &String,
-	account: &AccountId32,
-) -> Result<(), Box<dyn std::error::Error>> {
-	let api = ClientBuilder::new()
-		.set_url(node)
-		.build()
-		.await?
-		.to_runtime_api::<runtime::RuntimeApi<DefaultConfig, PolkadotExtrinsicParams<DefaultConfig>>>(
-		);
+async fn check_account(node: &str, account: &AccountId32) -> Result<(), Error> {
+	let api = connect(node).await?;
 
 	let ext_deposit = api.constants().balances().existential_deposit().unwrap();
 

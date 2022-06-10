@@ -1,16 +1,10 @@
 use log::*;
 use subxt::{ClientBuilder, DefaultConfig, PolkadotExtrinsicParams};
 
-#[subxt::subxt(runtime_metadata_path = "metadata.scale")]
-pub mod runtime {}
+use crate::shared::{connect, Error};
 
-pub async fn calc_tps(node: &String, n: usize) -> Result<(), Box<dyn std::error::Error>> {
-	let api = ClientBuilder::new()
-		.set_url(node)
-		.build()
-		.await?
-		.to_runtime_api::<runtime::RuntimeApi<DefaultConfig, PolkadotExtrinsicParams<DefaultConfig>>>(
-		);
+pub async fn calc_tps(node: &str, n: usize) -> Result<(), Error> {
+	let api = connect(node).await?;
 
 	let storage_timestamp = api.storage().timestamp();
 
