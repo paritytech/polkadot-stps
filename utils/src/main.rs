@@ -8,7 +8,7 @@ mod sender;
 mod shared;
 mod tps;
 
-use shared::{runtime, Error};
+use shared::Error;
 
 #[derive(Parser)]
 struct Cli {
@@ -130,10 +130,10 @@ async fn main() -> Result<(), Error> {
 				args.node_index, &args.funded_accounts
 			);
 			let n_accounts = funder::n_accounts(&args.funded_accounts);
-			let n_transactions = n_accounts / &args.total_nodes;
+			let n_transactions = n_accounts / args.total_nodes;
 
 			// we need to truncate so that all nodes receive an equal amount of transactions
-			let n_accounts_truncated = n_transactions * &args.total_nodes;
+			let n_accounts_truncated = n_transactions * args.total_nodes;
 
 			sender::send_funds(
 				args.node_url,
@@ -153,10 +153,10 @@ async fn main() -> Result<(), Error> {
 		Commands::CalculateTPS(args) => {
 			info!("Calculating TPS on finalized blocks.");
 			let n_accounts = funder::n_accounts(&args.funded_accounts);
-			let n_transactions = n_accounts / &args.total_nodes;
+			let n_transactions = n_accounts / args.total_nodes;
 
 			// sender truncates, so we need to truncate here as well
-			let n_accounts_truncated = n_transactions * &args.total_nodes;
+			let n_accounts_truncated = n_transactions * args.total_nodes;
 
 			tps::calc_tps(&args.node_url, n_accounts_truncated).await?;
 		},

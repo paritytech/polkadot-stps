@@ -4,8 +4,7 @@ use log::*;
 use subxt::{
 	extrinsic::Era,
 	sp_core::{sr25519::Pair as SrPair, Pair},
-	ClientBuilder, DefaultConfig, PairSigner, PolkadotExtrinsicParams,
-	PolkadotExtrinsicParamsBuilder as Params,
+	DefaultConfig, PairSigner, PolkadotExtrinsicParamsBuilder as Params,
 };
 
 use crate::shared::{connect, Error};
@@ -26,11 +25,9 @@ async fn wait_for_events(node: String, node_index: usize, n: usize) -> Result<()
 			let block_hash = api.client.rpc().block_hash(Some(i.into())).await?.unwrap();
 
 			let events = api.events().at(block_hash).await?;
-			for e in events.iter_raw() {
-				if let Ok(raw_event) = e {
-					if raw_event.pallet == "Balances" && raw_event.variant == "Transfer" {
-						balance_transfer_count = balance_transfer_count + 1;
-					}
+			for raw_event in events.iter_raw().flatten() {
+				if raw_event.pallet == "Balances" && raw_event.variant == "Transfer" {
+					balance_transfer_count += 1;
 				}
 			}
 		}
@@ -90,12 +87,11 @@ pub async fn send_funds(
 		);
 
 	info!("Node {}: sending {} transactions in chunks of {}", node_index, n_tx_sender, chunk_size);
-	let mut i = 0;
 	let mut last_now = std::time::Instant::now();
 	let mut last_sent = 0;
 	let start = std::time::Instant::now();
 
-	for chunk in txs.chunks(chunk_size) {
+	for (i, chunk) in txs.chunks(chunk_size).enumerate() {
 		let mut hashes = Vec::new();
 		for tx in chunk {
 			let hash = api.client.rpc().submit_extrinsic(tx);
@@ -117,7 +113,6 @@ pub async fn send_funds(
 			last_now = std::time::Instant::now();
 			last_sent = i * chunk_size;
 		}
-		i += 1;
 	}
 	let rate = n_tx_sender as f64 / start.elapsed().as_secs_f64();
 	info!(
@@ -164,7 +159,7 @@ mod tests {
 	#[test]
 	/// Check that the generated addresses are unique.
 	fn generate_receivers_unique() {
-		let receivers = super::generate_receivers(1024);
+		let receivers = super::generate_receivers(1024, 0);
 		let set: Set<_> = receivers.iter().collect();
 
 		assert_eq!(set.len(), receivers.len());

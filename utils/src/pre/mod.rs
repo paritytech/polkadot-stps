@@ -1,10 +1,10 @@
 use subxt::{
 	sp_core::{sr25519::Pair as SrPair, Pair},
 	sp_runtime::AccountId32,
-	ClientBuilder, DefaultConfig, PairSigner, PolkadotExtrinsicParams,
+	DefaultConfig, PairSigner,
 };
 
-use crate::shared::{connect, Error, API};
+use crate::shared::{connect, Error};
 
 /// Check first and last accounts
 pub async fn pre_conditions(node: &str, derivation: &str, n: usize) -> Result<(), Error> {
