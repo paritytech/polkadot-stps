@@ -12,6 +12,8 @@ use subxt::{
 	DefaultConfig, PairSigner,
 };
 
+use crate::shared::Error;
+
 /// Initial funds for a genesis account.
 const FUNDS: u64 = 10_000_000_000_000_000;
 
@@ -26,7 +28,7 @@ pub async fn funded_accounts_json(
 	n: usize,
 	path: &Path,
 	threads: usize,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Error> {
 	let accounts = derive_accounts_json(derivation_blueprint, n, threads).await?;
 
 	let mut file = File::create(path)?;
@@ -37,7 +39,7 @@ pub async fn derive_accounts_json(
 	derivation_blueprint: &str,
 	n: usize,
 	threads: usize,
-) -> Result<Value, Box<dyn std::error::Error>> {
+) -> Result<Value, Error> {
 	let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(threads).build()?;
 	// Round n up to the next multiple of threads.
 	let n = (n + threads - 1) / threads * threads;

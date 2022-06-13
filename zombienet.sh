@@ -3,7 +3,7 @@
 set -e
 
 POLKADOT_V=v0.9.22
-ZOMBIENET_V=v1.2.37
+ZOMBIENET_V=v1.2.39
 
 print_help() {
   echo "🧟 Zombienet - Polkadot Ecosystem Performance Benchmarks 🦾"

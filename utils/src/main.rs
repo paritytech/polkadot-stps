@@ -5,7 +5,10 @@ use std::path::PathBuf;
 mod funder;
 mod pre;
 mod sender;
+mod shared;
 mod tps;
+
+use shared::Error;
 
 #[derive(Parser)]
 struct Cli {
@@ -108,11 +111,8 @@ struct CalculateTPSArgs {
 	funded_accounts: PathBuf,
 }
 
-#[subxt::subxt(runtime_metadata_path = "metadata.scale")]
-pub mod runtime {}
-
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Error> {
 	env_logger::init_from_env(
 		env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info"),
 	);
@@ -125,14 +125,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 			info!("Wrote funded accounts to: {:?}", args.output);
 		},
 		Commands::SendBalanceTransfers(args) => {
-			info!("Node {}: Reading funded accounts from: {:?}", args.node_index, &args.funded_accounts);
+			info!(
+				"Node {}: Reading funded accounts from: {:?}",
+				args.node_index, &args.funded_accounts
+			);
 			let n_accounts = funder::n_accounts(&args.funded_accounts);
-			let n_transactions = n_accounts / &args.total_nodes;
+			let n_transactions = n_accounts / args.total_nodes;
 
 			// we need to truncate so that all nodes receive an equal amount of transactions
-			let n_accounts_truncated = n_transactions * &args.total_nodes;
+			let n_accounts_truncated = n_transactions * args.total_nodes;
 
-			sender::send_funds(args.node_url, args.node_index, &args.derivation, args.chunk_size, n_transactions, n_accounts_truncated).await?;
+			sender::send_funds(
+				args.node_url,
+				args.node_index,
+				&args.derivation,
+				args.chunk_size,
+				n_transactions,
+				n_accounts_truncated,
+			)
+			.await?;
 		},
 		Commands::CheckPreConditions(args) => {
 			info!("Checking sTPS pre-conditions (account nonces and free balances).");
@@ -142,10 +153,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		Commands::CalculateTPS(args) => {
 			info!("Calculating TPS on finalized blocks.");
 			let n_accounts = funder::n_accounts(&args.funded_accounts);
-			let n_transactions = n_accounts / &args.total_nodes;
+			let n_transactions = n_accounts / args.total_nodes;
 
 			// sender truncates, so we need to truncate here as well
-			let n_accounts_truncated = n_transactions * &args.total_nodes;
+			let n_accounts_truncated = n_transactions * args.total_nodes;
 
 			tps::calc_tps(&args.node_url, n_accounts_truncated).await?;
 		},

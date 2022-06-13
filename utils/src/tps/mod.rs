@@ -1,20 +1,13 @@
 use log::*;
-use subxt::{ClientBuilder, DefaultConfig, PolkadotExtrinsicParams};
 
-#[subxt::subxt(runtime_metadata_path = "metadata.scale")]
-pub mod runtime {}
+use crate::shared::{connect, Error};
 
-pub async fn calc_tps(node: &String, n: usize) -> Result<(), Box<dyn std::error::Error>> {
-	let api = ClientBuilder::new()
-		.set_url(node)
-		.build()
-		.await?
-		.to_runtime_api::<runtime::RuntimeApi<DefaultConfig, PolkadotExtrinsicParams<DefaultConfig>>>(
-		);
+pub async fn calc_tps(node: &str, n: usize) -> Result<(), Error> {
+	let api = connect(node).await?;
 
 	let storage_timestamp = api.storage().timestamp();
 
-	let genesis_hash = api.client.rpc().block_hash(Some((0 as u32).into())).await?.unwrap();
+	let genesis_hash = api.client.rpc().block_hash(Some(0u32.into())).await?.unwrap();
 
 	let mut last_block_timestamp = storage_timestamp.now(Some(genesis_hash)).await?;
 
@@ -31,12 +24,10 @@ pub async fn calc_tps(node: &String, n: usize) -> Result<(), Box<dyn std::error:
 
 		let mut tps_count = 0;
 		let events = api.events().at(block_hash).await?;
-		for e in events.iter_raw() {
-			if let Ok(raw_event) = e {
-				if raw_event.pallet == "Balances" && raw_event.variant == "Transfer" {
-					total_count = total_count + 1;
-					tps_count = tps_count + 1;
-				}
+		for raw_event in events.iter_raw().flatten() {
+			if raw_event.pallet == "Balances" && raw_event.variant == "Transfer" {
+				total_count += 1;
+				tps_count += 1;
 			}
 		}
 
@@ -46,7 +37,7 @@ pub async fn calc_tps(node: &String, n: usize) -> Result<(), Box<dyn std::error:
 			info!("TPS on block {}: {}", block_n, tps);
 		}
 
-		block_n = block_n + 1;
+		block_n += 1;
 		if total_count >= n {
 			let avg_tps: f32 = tps_vec.iter().sum::<f32>() / tps_vec.len() as f32;
 			info!("average TPS: {}", avg_tps);
