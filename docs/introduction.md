@@ -10,7 +10,3 @@ Main points of sTPS are:
 - No account initialisation
 
 Please refer to [methodology.md](./methodology.md) for information on **how** sTPS is being measured in practice, and to [results.md](./results.md) for the actual numbers.
-
-# Ecosystem Performance
-
-ToDo
