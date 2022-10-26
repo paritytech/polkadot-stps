@@ -28,7 +28,7 @@ enum Commands {
 	CalculateTPS(CalculateTPSArgs),
 }
 
-const DEFAULT_FUNDED_JSON_PATH: &str = "tests/stps/funded-accounts.json";
+const DEFAULT_FUNDED_JSON_PATH: &str = "tests/funded-accounts.json";
 const DEFAULT_DERIVATION: &str = "//Sender/";
 
 #[derive(Parser, Debug)]
