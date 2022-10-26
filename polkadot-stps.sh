@@ -2,8 +2,7 @@
 
 set -e
 
-POLKADOT_V=v0.9.22
-ZOMBIENET_V=v1.2.39
+ZOMBIENET_V=v1.3.5
 
 print_help() {
   echo "Polkadot sTPS"
@@ -17,14 +16,6 @@ fetch_zombienet() {
     echo "fetching zombienet executable..."
     wget --quiet https://github.com/paritytech/zombienet/releases/download/$ZOMBIENET_V/zombienet-linux
     chmod +x zombienet-linux
-  fi
-}
-
-fetch_polkadot() {
-  if [ ! -s polkadot ]; then
-    echo "fetching polkadot executable..."
-    wget --quiet https://github.com/paritytech/polkadot/releases/download/$POLKADOT_V/polkadot
-    chmod +x polkadot
   fi
 }
 
@@ -80,7 +71,6 @@ stps_init() {
   install_gcloud
   # todo: init_gcloud
   fetch_zombienet
-  fetch_polkadot
 }
 
 subcommand=$1

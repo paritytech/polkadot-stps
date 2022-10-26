@@ -26,7 +26,6 @@ The Rust crate under [`utils`](https://github.com/paritytech/polkadot-stps/tree/
 The Zombienet DSL on `.feature` files is responsible for specifying the different nodes as targets for each `utils.js`.
 
 The `polkadot-stps.sh` script automates the process of bootstrapping the setup, namely:
-- fetching the `polkadot` executable binary on a specific version.
 - fetching the `zombienet-linux` executable binary on a specific version.
 - installing `polkadot-js` via `npm`.
 - feeding the correct kubernetes parameters to `zombienet-linux`.
