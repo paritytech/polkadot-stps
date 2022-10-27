@@ -3,6 +3,7 @@
 set -e
 
 ZOMBIENET_V=v1.3.5
+CLUSTER_ID="gke_parity-zombienet_europe-west3-b_parity-zombienet"
 
 print_help() {
   echo "Polkadot sTPS"
@@ -43,14 +44,15 @@ install_gcloud() {
   fi
 }
 
-# init_gcloud() {
+init_gcloud() {
   # if ! xxx; then
     # gcloud auth login
   # fi
-  # if ! yyy; then
-    # gcloud container clusters get-credentials parity-zombienet --zone europe-west3-b --project parity-zombienet
-  # fi
-# }
+  if [[ $(kubectl config current-context) != $CLUSTER_ID ]]; then
+    echo "setting up kubectl context for gcloud cluster..." 
+    gcloud container clusters get-credentials parity-zombienet --zone europe-west3-b --project parity-zombienet
+  fi
+}
 
 build_collator() {
   if [ ! -s target/release/parachain-collator ]; then
@@ -69,7 +71,7 @@ stps_init() {
   install_polkadotjs
   install_kubectl
   install_gcloud
-  # todo: init_gcloud
+  init_gcloud
   fetch_zombienet
 }
 
