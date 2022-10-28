@@ -22,6 +22,9 @@
           "validator": true,
           "args": [
             "--alice",
+            "--chain=polkadot-dev",
+            "--database=paritydb",
+            "--execution=wasm",
             "-lparachain=debug",
             "--pool-limit=1000000000",
             "--pool-kbytes=10000000000"
