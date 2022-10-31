@@ -5,14 +5,12 @@
     },
     "relaychain": {
       "default_image": "docker.io/parity/polkadot:latest",
-      "chain": "rococo-local",
+      "chain": "polkadot-dev",
       "default_command": "polkadot",
       "genesis": {
         "runtime": {
-          "runtime_genesis_config": {
-            "balances": {
-              "balances": {% include "./funded-accounts.json" %}
-            }
+          "balances": {
+            "balances": {% include "./funded-accounts.json" %}
           }
         }
       },
