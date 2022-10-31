@@ -7,8 +7,7 @@ use std::{
 	path::{Path, PathBuf},
 };
 use subxt::{
-	sp_core::{sr25519::Pair as SrPair, Pair},
-	sp_runtime::AccountId32,
+	sp_core::{sr25519::Pair as SrPair, Pair, crypto::{Ss58AddressFormatRegistry, Ss58Codec}},
 	DefaultConfig, PairSigner,
 };
 
@@ -78,13 +77,13 @@ pub async fn derive_accounts_json(
 	serde_json::to_value(&funded_accounts).map_err(Into::into)
 }
 
-async fn derive_accounts(derivation_blueprint: &str, range: Range<usize>) -> Vec<AccountId32> {
+async fn derive_accounts(derivation_blueprint: &str, range: Range<usize>) -> Vec<String> {
 	range
 		.map(|i| {
 			let derivation = format!("{}{}", derivation_blueprint, i);
 			let pair: SrPair = Pair::from_string(&derivation, None).unwrap();
 			let signer: PairSigner<DefaultConfig, SrPair> = PairSigner::new(pair);
-			signer.account_id().clone()
+			signer.account_id().to_ss58check_with_version(Ss58AddressFormatRegistry::PolkadotAccount.into())
 		})
 		.collect()
 }
