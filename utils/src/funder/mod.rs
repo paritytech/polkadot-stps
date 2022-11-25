@@ -14,7 +14,8 @@ use subxt::{
 use crate::shared::Error;
 
 /// Initial funds for a genesis account.
-const FUNDS: u64 = 10_000_000_000_000_000;
+const UNITS: u64 = 10_000_000_000;
+const FUNDS: u64 = 1_000_000 * UNITS;
 
 /// Creates a json file with a specific number of accounts.
 ///
@@ -57,6 +58,16 @@ pub async fn derive_accounts_json(
 		futures.push(f);
 	}
 
+	let endowed_accounts: Vec<(String, u64)> = derive_endowed_accounts()
+		.into_iter()
+		.map(|a| (a.to_string(), FUNDS))
+		.collect();
+
+	let stash_accounts: Vec<(String, u64)> = derive_stash_accounts()
+		.into_iter()
+		.map(|a| (a.to_string(), FUNDS))
+		.collect();
+
 	let funded_accounts: Vec<(String, u64)> = try_join_all(futures)
 		.await
 		.iter()
@@ -64,6 +75,12 @@ pub async fn derive_accounts_json(
 		.flatten()
 		.map(|a| (a.to_string(), FUNDS))
 		.collect();
+
+	let mut accounts: Vec<(String, u64)> = Vec::new();
+	accounts.extend(endowed_accounts);
+	accounts.extend(stash_accounts);
+	accounts.extend(funded_accounts);
+
 	// Don't just drop a tokio runtime in async context, since that panics.
 	rt.shutdown_background();
 	let elapsed = now.elapsed();
@@ -74,7 +91,25 @@ pub async fn derive_accounts_json(
 		n as f64 / elapsed.as_secs_f64()
 	);
 
-	serde_json::to_value(&funded_accounts).map_err(Into::into)
+	serde_json::to_value(&accounts).map_err(Into::into)
+}
+
+fn derive_stash_accounts() -> Vec<String> {
+	let endowed = ["//Alice//stash", "//Bob//stash", "//Charlie//stash", "//Dave//stash", "//Eve//stash", "//Ferdie//stash"];
+	endowed.map(|e| {
+		let pair: SrPair = Pair::from_string(e, None).unwrap();
+		let signer: PairSigner<DefaultConfig, SrPair> = PairSigner::new(pair);
+		signer.account_id().to_ss58check_with_version(Ss58AddressFormatRegistry::PolkadotAccount.into())
+	}).into_iter().collect()
+}
+
+fn derive_endowed_accounts() -> Vec<String> {
+	let endowed = ["//Alice", "//Bob", "//Charlie", "//Dave", "//Eve", "//Ferdie"];
+	endowed.map(|e| {
+		let pair: SrPair = Pair::from_string(e, None).unwrap();
+		let signer: PairSigner<DefaultConfig, SrPair> = PairSigner::new(pair);
+		signer.account_id().to_ss58check_with_version(Ss58AddressFormatRegistry::PolkadotAccount.into())
+	}).into_iter().collect()
 }
 
 async fn derive_accounts(derivation_blueprint: &str, range: Range<usize>) -> Vec<String> {
