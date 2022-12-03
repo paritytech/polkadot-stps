@@ -1,13 +1,13 @@
 use log::{error, info, warn};
 use std::time::Duration;
-use subxt::{ClientBuilder, DefaultConfig, PolkadotExtrinsicParams};
+use subxt::{OnlineClient, SubstrateConfig};
 
 /// The runtime used by all other crates.
 #[subxt::subxt(runtime_metadata_path = "metadata.scale")]
 pub mod runtime {}
 
 /// Api of the runtime.
-pub type Api = runtime::RuntimeApi<DefaultConfig, PolkadotExtrinsicParams<DefaultConfig>>;
+pub type Api = OnlineClient<SubstrateConfig>;
 /// Error type for the crate.
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 
@@ -20,10 +20,10 @@ pub const RETRY_DELAY: Duration = Duration::from_secs(1);
 pub(crate) async fn connect(url: &str) -> Result<Api, Error> {
 	for i in 1..=MAX_ATTEMPTS {
 		info!("Attempt #{}: Connecting to {}", i, url);
-		let promise = ClientBuilder::new().set_url(url).build();
+		let promise = OnlineClient::<SubstrateConfig>::from_url(url);
 
 		match promise.await {
-			Ok(client) => return Ok(client.to_runtime_api()),
+			Ok(client) => return Ok(client),
 			Err(err) => {
 				warn!("API client {} error: {:?}", url, err);
 				tokio::time::sleep(RETRY_DELAY).await;

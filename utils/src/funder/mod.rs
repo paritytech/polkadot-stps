@@ -6,11 +6,9 @@ use std::{
 	ops::Range,
 	path::{Path, PathBuf},
 };
-use subxt::{
-	sp_core::{sr25519::Pair as SrPair, Pair},
-	sp_runtime::AccountId32,
-	DefaultConfig, PairSigner,
-};
+use subxt::{tx::PairSigner, SubstrateConfig};
+use sp_runtime::AccountId32;
+use sp_core::{sr25519::Pair as SrPair, Pair};
 
 use crate::shared::Error;
 
@@ -83,7 +81,7 @@ async fn derive_accounts(derivation_blueprint: &str, range: Range<usize>) -> Vec
 		.map(|i| {
 			let derivation = format!("{}{}", derivation_blueprint, i);
 			let pair: SrPair = Pair::from_string(&derivation, None).unwrap();
-			let signer: PairSigner<DefaultConfig, SrPair> = PairSigner::new(pair);
+			let signer: PairSigner<SubstrateConfig, SrPair> = PairSigner::new(pair);
 			signer.account_id().clone()
 		})
 		.collect()

@@ -1,13 +1,13 @@
 use codec::Decode;
 use futures::future::try_join_all;
 use log::*;
+use sp_core::{sr25519::Pair as SrPair, Pair};
 use subxt::{
-	extrinsic::Era,
-	sp_core::{sr25519::Pair as SrPair, Pair},
-	DefaultConfig, PairSigner, PolkadotExtrinsicParamsBuilder as Params,
+	tx::{BaseExtrinsicParamsBuilder as Params, Era, PairSigner},
+	SubstrateConfig,
 };
 
-use crate::shared::{connect, Error};
+use crate::shared::{connect, runtime, Error};
 
 async fn wait_for_events(node: String, node_index: usize, n: usize) -> Result<(), Error> {
 	let api = connect(&node).await?;
@@ -15,18 +15,18 @@ async fn wait_for_events(node: String, node_index: usize, n: usize) -> Result<()
 	let mut balance_transfer_count = 0;
 	let mut last_checked_block_number = 0;
 
-	let mut finalized_block_headers = api.client.rpc().subscribe_finalized_blocks().await?;
+	let mut finalized_block_headers = api.rpc().subscribe_finalized_block_headers().await?;
 
 	while let Some(b) = finalized_block_headers.next().await {
 		let finalized_block_header = b.unwrap();
 		let finalized_block_number = finalized_block_header.number;
 
 		for i in last_checked_block_number..finalized_block_number {
-			let block_hash = api.client.rpc().block_hash(Some(i.into())).await?.unwrap();
+			let block_hash = api.rpc().block_hash(Some(i.into())).await?.unwrap();
 
-			let events = api.events().at(block_hash).await?;
-			for raw_event in events.iter_raw().flatten() {
-				if raw_event.pallet == "Balances" && raw_event.variant == "Transfer" {
+			let events = api.events().at(Some(block_hash)).await?;
+			for event in events.iter().flatten() {
+				if event.pallet_name() == "Balances" && event.variant_name() == "Transfer" {
 					balance_transfer_count += 1;
 				}
 			}
@@ -36,7 +36,7 @@ async fn wait_for_events(node: String, node_index: usize, n: usize) -> Result<()
 
 		if balance_transfer_count >= n {
 			info!("Node {}: Found all {} transfer events", node_index, balance_transfer_count);
-			break
+			break;
 		}
 		if balance_transfer_count > 0 {
 			info!(
@@ -62,22 +62,20 @@ pub async fn send_funds(
 	let receivers = generate_receivers(n_tx_sender, node_index); // one receiver per sender
 	let api = connect(&node).await?;
 
-	let ext_deposit = api.constants().balances().existential_deposit().unwrap();
+	let ext_deposit_addr = runtime::constants().balances().existential_deposit();
+	let ext_deposit = api.constants().at(&ext_deposit_addr)?;
 
 	info!("Node {}: signing {} transactions", node_index, n_tx_sender);
 	let mut txs = Vec::new();
 	for i in 0..n_tx_sender {
 		let shift = node_index * n_tx_sender;
-		let mut signer = generate_signer(derivation, shift + i);
-		signer.set_nonce(0); // We only use every account once.
-		let tx_params = Params::new().era(Era::Immortal, *api.client.genesis());
-		let tx = api
-			.tx()
+		let signer = generate_signer(derivation, shift + i);
+		let tx_params = Params::new().era(Era::Immortal, api.genesis_hash());
+		let unsigned_tx = runtime::tx()
 			.balances()
-			.transfer_keep_alive(receivers[i as usize].clone().into(), ext_deposit)
-			.create_signed(&signer, tx_params)
-			.await?;
-		txs.push(tx);
+			.transfer_keep_alive(receivers[i as usize].clone().into(), ext_deposit);
+		let signed_tx = api.tx().create_signed(&unsigned_tx, &signer, tx_params).await?;
+		txs.push(signed_tx);
 	}
 
 	// Start a second thread to listen for `Transfer` events.
@@ -94,7 +92,7 @@ pub async fn send_funds(
 	for (i, chunk) in txs.chunks(chunk_size).enumerate() {
 		let mut hashes = Vec::new();
 		for tx in chunk {
-			let hash = api.client.rpc().submit_extrinsic(tx);
+			let hash = tx.submit();
 			hashes.push(hash);
 		}
 		try_join_all(hashes).await?;
@@ -131,15 +129,18 @@ pub async fn send_funds(
 	Ok(())
 }
 
-pub fn generate_signer(derivation_blueprint: &str, i: usize) -> PairSigner<DefaultConfig, SrPair> {
+pub fn generate_signer(
+	derivation_blueprint: &str,
+	i: usize,
+) -> PairSigner<SubstrateConfig, SrPair> {
 	let pair: SrPair =
 		Pair::from_string(format!("{}{}", derivation_blueprint, i).as_str(), None).unwrap();
-	let signer: PairSigner<DefaultConfig, SrPair> = PairSigner::new(pair);
+	let signer: PairSigner<SubstrateConfig, SrPair> = PairSigner::new(pair);
 	signer
 }
 
 /// Generates a vector of account IDs.
-fn generate_receivers(n: usize, node_index: usize) -> Vec<subxt::sp_core::crypto::AccountId32> {
+fn generate_receivers(n: usize, node_index: usize) -> Vec<sp_core::crypto::AccountId32> {
 	let shift = node_index * n;
 	let mut receivers = Vec::new();
 	for i in 0..n {
