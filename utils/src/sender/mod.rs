@@ -22,9 +22,9 @@ async fn wait_for_events(node: String, node_index: usize, n: usize) -> Result<()
 		let finalized_block_number = finalized_block_header.number;
 
 		for i in last_checked_block_number..finalized_block_number {
-			let block_hash = api.rpc().block_hash(Some(i.into())).await?.unwrap();
+			let block_hash = api.rpc().block_hash(Some(i.into())).await?;
 
-			let events = api.events().at(Some(block_hash)).await?;
+			let events = api.events().at(block_hash).await?;
 			for event in events.iter().flatten() {
 				if event.pallet_name() == "Balances" && event.variant_name() == "Transfer" {
 					balance_transfer_count += 1;
