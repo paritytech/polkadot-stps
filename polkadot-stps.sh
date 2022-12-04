@@ -54,13 +54,6 @@ init_gcloud() {
   fi
 }
 
-build_collator() {
-  if [ ! -s target/release/parachain-collator ]; then
-    echo "building collator executable..."
-    cargo build --release
-  fi
-}
-
 stps_test() {
   stps_init
   export PATH=.:$PATH
