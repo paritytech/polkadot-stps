@@ -2,6 +2,7 @@
 
 set -e
 
+POLKADOT_V=v0.9.33
 ZOMBIENET_V=v1.3.5
 CLUSTER_ID="gke_parity-zombienet_europe-west3-b_parity-zombienet"
 
@@ -17,6 +18,14 @@ fetch_zombienet() {
     echo "fetching zombienet executable..."
     wget --quiet https://github.com/paritytech/zombienet/releases/download/$ZOMBIENET_V/zombienet-linux
     chmod +x zombienet-linux
+  fi
+}
+
+fetch_polkadot() {
+  if [ ! -s polkadot ]; then
+    echo "fetching polkadot executable..."
+    wget https://github.com/paritytech/polkadot/releases/download/$POLKADOT_V/polkadot
+    chmod +x polkadot
   fi
 }
 
@@ -66,6 +75,7 @@ stps_init() {
   install_gcloud
   init_gcloud
   fetch_zombienet
+  fetch_polkadot
 }
 
 subcommand=$1
