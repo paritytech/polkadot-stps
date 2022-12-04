@@ -74,7 +74,7 @@ pub async fn send_funds(
 		let unsigned_tx = runtime::tx()
 			.balances()
 			.transfer_keep_alive(receivers[i as usize].clone().into(), ext_deposit);
-		let signed_tx = api.tx().create_signed(&unsigned_tx, &signer, tx_params).await?;
+		let signed_tx = api.tx().create_signed_with_nonce(&unsigned_tx, &signer, 0, tx_params)?;
 		txs.push(signed_tx);
 	}
 
