@@ -1,20 +1,20 @@
 use sp_core::{sr25519::Pair as SrPair, Pair};
 use sp_runtime::AccountId32;
-use subxt::{tx::PairSigner, SubstrateConfig};
+use subxt::{tx::PairSigner, PolkadotConfig};
 
 use crate::shared::{connect, runtime, Error};
 
 /// Check first and last accounts
 pub async fn pre_conditions(node: &str, derivation: &str, n: usize) -> Result<(), Error> {
 	let pair_0: SrPair = Pair::from_string(format!("{}{}", derivation, 0).as_str(), None).unwrap();
-	let signer_0: PairSigner<SubstrateConfig, SrPair> = PairSigner::new(pair_0);
+	let signer_0: PairSigner<PolkadotConfig, SrPair> = PairSigner::new(pair_0);
 	let account_0 = signer_0.account_id();
 
 	check_account(node, account_0).await?;
 
 	let pair_n: SrPair =
 		Pair::from_string(format!("{}{}", derivation, n - 1).as_str(), None).unwrap();
-	let signer_n: PairSigner<SubstrateConfig, SrPair> = PairSigner::new(pair_n);
+	let signer_n: PairSigner<PolkadotConfig, SrPair> = PairSigner::new(pair_n);
 	let account_n = signer_n.account_id();
 
 	check_account(node, account_n).await?;

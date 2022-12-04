@@ -4,7 +4,7 @@ use log::*;
 use sp_core::{sr25519::Pair as SrPair, Pair};
 use subxt::{
 	tx::{BaseExtrinsicParamsBuilder as Params, Era, PairSigner},
-	SubstrateConfig,
+	PolkadotConfig,
 };
 
 use crate::shared::{connect, runtime, Error};
@@ -129,13 +129,10 @@ pub async fn send_funds(
 	Ok(())
 }
 
-pub fn generate_signer(
-	derivation_blueprint: &str,
-	i: usize,
-) -> PairSigner<SubstrateConfig, SrPair> {
+pub fn generate_signer(derivation_blueprint: &str, i: usize) -> PairSigner<PolkadotConfig, SrPair> {
 	let pair: SrPair =
 		Pair::from_string(format!("{}{}", derivation_blueprint, i).as_str(), None).unwrap();
-	let signer: PairSigner<SubstrateConfig, SrPair> = PairSigner::new(pair);
+	let signer: PairSigner<PolkadotConfig, SrPair> = PairSigner::new(pair);
 	signer
 }
 

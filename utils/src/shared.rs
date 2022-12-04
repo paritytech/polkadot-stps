@@ -1,13 +1,13 @@
 use log::{error, info, warn};
 use std::time::Duration;
-use subxt::{OnlineClient, SubstrateConfig};
+use subxt::{OnlineClient, PolkadotConfig};
 
 /// The runtime used by all other crates.
 #[subxt::subxt(runtime_metadata_path = "metadata.scale")]
 pub mod runtime {}
 
 /// Api of the runtime.
-pub type Api = OnlineClient<SubstrateConfig>;
+pub type Api = OnlineClient<PolkadotConfig>;
 /// Error type for the crate.
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 
@@ -20,7 +20,7 @@ pub const RETRY_DELAY: Duration = Duration::from_secs(1);
 pub(crate) async fn connect(url: &str) -> Result<Api, Error> {
 	for i in 1..=MAX_ATTEMPTS {
 		info!("Attempt #{}: Connecting to {}", i, url);
-		let promise = OnlineClient::<SubstrateConfig>::from_url(url);
+		let promise = OnlineClient::<PolkadotConfig>::from_url(url);
 
 		match promise.await {
 			Ok(client) => return Ok(client),
