@@ -26,8 +26,4 @@ jobs:
       # zombienet
       - name: Run zombienet
         run: |
-          # Prevent the zombienet.sh script from building the collator since it is not needed.
-          mkdir -p target/release
-          echo "not needed" > target/release/parachain-collator
-
-          ./zombienet.sh test tests/stps/relay.feature
+          ./polkadot-stps.sh test tests/stps/relay-single-node.zndsl
