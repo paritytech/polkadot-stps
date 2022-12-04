@@ -7,15 +7,15 @@ pub async fn calc_tps(node: &str, n: usize) -> Result<(), Error> {
 
 	let storage_timestamp_storage_addr = runtime::storage().timestamp().now();
 
-	let genesis_hash = api.rpc().block_hash(Some(0u32.into())).await?;
+	let block_1_hash = api.rpc().block_hash(Some(1u32.into())).await?;
 
 	let mut last_block_timestamp = api
 		.storage()
-		.fetch(&storage_timestamp_storage_addr, genesis_hash)
+		.fetch(&storage_timestamp_storage_addr, block_1_hash)
 		.await?
 		.unwrap();
 
-	let mut block_n: u32 = 1;
+	let mut block_n: u32 = 2;
 	let mut total_count = 0;
 	let mut tps_vec = Vec::new();
 
