@@ -2,6 +2,7 @@
 
 set -e
 
+POLKADOT_V=v0.9.33
 ZOMBIENET_V=v1.3.5
 CLUSTER_ID="gke_parity-zombienet_europe-west3-b_parity-zombienet"
 
@@ -9,7 +10,8 @@ print_help() {
   echo "Polkadot sTPS"
   echo ""
   echo "$ ./polkadot-stps.sh init"
-  echo "$ ./polkadot-stps.sh test tests/relay.feature"
+  echo "$ ./polkadot-stps.sh test tests/relay.zndsl"
+  echo "$ ./polkadot-stps.sh test_native tests/relay-single-node-native.zndsl"
 }
 
 fetch_zombienet() {
@@ -17,6 +19,14 @@ fetch_zombienet() {
     echo "fetching zombienet executable..."
     wget --quiet https://github.com/paritytech/zombienet/releases/download/$ZOMBIENET_V/zombienet-linux
     chmod +x zombienet-linux
+  fi
+}
+
+fetch_polkadot() {
+  if [ ! -s polkadot ]; then
+    echo "fetching polkadot executable..."
+    wget https://github.com/paritytech/polkadot/releases/download/$POLKADOT_V/polkadot
+    chmod +x polkadot
   fi
 }
 
@@ -54,24 +64,29 @@ init_gcloud() {
   fi
 }
 
-build_collator() {
-  if [ ! -s target/release/parachain-collator ]; then
-    echo "building collator executable..."
-    cargo build --release
-  fi
-}
-
 stps_test() {
-  stps_init
+  stps_init_kubernetes
   export PATH=.:$PATH
   ./zombienet-linux test --provider kubernetes $1
 }
 
-stps_init() {
+stps_test_native() {
+  stps_init_native
+  export PATH=.:$PATH
+  ./zombienet-linux test --provider native $1
+}
+
+stps_init_kubernetes() {
   install_polkadotjs
   install_kubectl
   install_gcloud
   init_gcloud
+  fetch_zombienet
+}
+
+stps_init_native() {
+  fetch_polkadot
+  install_polkadotjs
   fetch_zombienet
 }
 
