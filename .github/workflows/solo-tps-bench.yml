@@ -18,7 +18,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: nightly-2021-12-01
+          toolchain: nightly-2022-06-30
           components: rustfmt, clippy
           target: wasm32-unknown-unknown
           override: true
@@ -26,8 +26,4 @@ jobs:
       # zombienet
       - name: Run zombienet
         run: |
-          # Prevent the zombienet.sh script from building the collator since it is not needed.
-          mkdir -p target/release
-          echo "not needed" > target/release/parachain-collator
-
-          ./zombienet.sh test tests/stps/relay.feature
+          ./polkadot-stps.sh test_native tests/relay-single-node-native.zndsl

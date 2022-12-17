@@ -1,31 +1,36 @@
 use log::*;
 
-use crate::shared::{connect, Error};
+use crate::shared::{connect, runtime, Error};
 
 pub async fn calc_tps(node: &str, n: usize) -> Result<(), Error> {
 	let api = connect(node).await?;
 
-	let storage_timestamp = api.storage().timestamp();
+	let storage_timestamp_storage_addr = runtime::storage().timestamp().now();
 
-	let genesis_hash = api.client.rpc().block_hash(Some(0u32.into())).await?.unwrap();
+	let block_1_hash = api.rpc().block_hash(Some(1u32.into())).await?;
 
-	let mut last_block_timestamp = storage_timestamp.now(Some(genesis_hash)).await?;
+	let mut last_block_timestamp = api
+		.storage()
+		.fetch(&storage_timestamp_storage_addr, block_1_hash)
+		.await?
+		.unwrap();
 
-	let mut block_n: u32 = 1;
+	let mut block_n: u32 = 2;
 	let mut total_count = 0;
 	let mut tps_vec = Vec::new();
 
 	loop {
-		let block_hash = api.client.rpc().block_hash(Some(block_n.into())).await?.unwrap();
+		let block_hash = api.rpc().block_hash(Some(block_n.into())).await?;
 
-		let block_timestamp = storage_timestamp.now(Some(block_hash)).await?;
+		let block_timestamp =
+			api.storage().fetch(&storage_timestamp_storage_addr, block_hash).await?.unwrap();
 		let time_diff = block_timestamp - last_block_timestamp;
 		last_block_timestamp = block_timestamp;
 
 		let mut tps_count = 0;
 		let events = api.events().at(block_hash).await?;
-		for raw_event in events.iter_raw().flatten() {
-			if raw_event.pallet == "Balances" && raw_event.variant == "Transfer" {
+		for event in events.iter().flatten() {
+			if event.pallet_name() == "Balances" && event.variant_name() == "Transfer" {
 				total_count += 1;
 				tps_count += 1;
 			}
@@ -41,7 +46,7 @@ pub async fn calc_tps(node: &str, n: usize) -> Result<(), Error> {
 		if total_count >= n {
 			let avg_tps: f32 = tps_vec.iter().sum::<f32>() / tps_vec.len() as f32;
 			info!("average TPS: {}", avg_tps);
-			break
+			break;
 		}
 	}
 
