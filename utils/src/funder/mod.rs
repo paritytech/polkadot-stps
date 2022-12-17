@@ -30,7 +30,7 @@ pub async fn funded_accounts_json(
 	let accounts = derive_accounts_json(derivation_blueprint, n, threads).await?;
 
 	let mut file = File::create(path)?;
-	serde_json::to_writer(&mut file, &accounts).map_err(Into::into)
+	serde_json::to_writer_pretty(&mut file, &accounts).map_err(Into::into)
 }
 
 pub async fn derive_accounts_json(
