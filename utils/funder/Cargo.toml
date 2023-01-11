@@ -1,0 +1,17 @@
+[package]
+name = "funder"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+utils = { path = ".."}
+log = "0.4.16"
+futures = "0.3.21"
+serde_json = "1.0.81"
+sp-core = { version = "7.0.0", default-features = false  }
+sp-runtime = "7.0.0"
+subxt = "0.25.0"
+tokio = { version = "1.18.0", features = ["rt-multi-thread", "macros", "time"] }
+clap = { version = "4.0.32", features = ["derive"] }

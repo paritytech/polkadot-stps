@@ -1,6 +1,19 @@
 use log::*;
+use clap::Parser;
+use utils::{connect, runtime, Error};
 
-use crate::shared::{connect, runtime, Error};
+/// util program to count TPS
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+   /// Node URL
+   #[arg(long, short)]
+   node_url: String,
+
+   /// Total number of expected transactions
+   #[arg(short)]
+   n: usize,
+}
 
 pub async fn calc_tps(node: &str, n: usize) -> Result<(), Error> {
 	let api = connect(node).await?;
@@ -52,3 +65,13 @@ pub async fn calc_tps(node: &str, n: usize) -> Result<(), Error> {
 
 	Ok(())
 }
+
+#[tokio::main]
+async fn main() -> Result<(), Error> {
+	let args = Args::parse();
+
+	calc_tps(&args.node_url, args.n).await?;
+
+	Ok(())
+}
+
