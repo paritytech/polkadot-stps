@@ -10,7 +10,6 @@ pub async fn pre_conditions(node_url: &str, i: usize, n: usize) -> Result<(), Er
 	let api = connect(node_url).await?;
 
 	for j in i..i+n {
-		println!("checking account pre-conditions: {}{} (i: {}, n: {})", DERIVATION, j, i, n);
 		info!("checking account pre-conditions: {}{} (i: {}, n: {})", DERIVATION, j, i, n);
 		let pair: SrPair = Pair::from_string(format!("{}{}", DERIVATION, j).as_str(), None).unwrap();
 		let signer: PairSigner<PolkadotConfig, SrPair> = PairSigner::new(pair);
