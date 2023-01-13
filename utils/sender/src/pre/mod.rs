@@ -9,7 +9,7 @@ use utils::{Api, connect, runtime, Error, DERIVATION};
 pub async fn pre_conditions(node_url: &str, i: usize, n: usize) -> Result<(), Error> {
 	let api = connect(node_url).await?;
 
-	for j in i..i+n {
+	for j in i*n..(i+1)*n {
 		info!("checking account pre-conditions: {}{} (i: {}, n: {})", DERIVATION, j, i, n);
 		let pair: SrPair = Pair::from_string(format!("{}{}", DERIVATION, j).as_str(), None).unwrap();
 		let signer: PairSigner<PolkadotConfig, SrPair> = PairSigner::new(pair);
