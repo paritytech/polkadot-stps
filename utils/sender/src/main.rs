@@ -17,6 +17,10 @@ use pre::pre_conditions;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
+	/// Node URL
+	#[arg(long)]
+	node_url: String,
+
 	/// Sender index.
 	#[arg(short)]
 	i: usize,
@@ -35,12 +39,13 @@ struct Args {
 }
 
 async fn send_funds(
+	node_url: &str,
 	sender_index: usize,
 	chunk_size: usize,
 	n_tx_sender: usize,
 ) -> Result<(), Error> {
 	let receivers = generate_receivers(n_tx_sender, sender_index); // one receiver per tx
-	let api = connect("127.0.0.1").await?;
+	let api = connect(node_url).await?;
 
 	let ext_deposit_addr = runtime::constants().balances().existential_deposit();
 	let ext_deposit = api.constants().at(&ext_deposit_addr)?;
@@ -127,9 +132,9 @@ async fn main() -> Result<(), Error> {
 	let chunk_size = args.chunk_size;
 	let n_tx_sender = args.n / args.total;
 
-	pre_conditions(sender_index, n_tx_sender).await?;
+	pre_conditions(&args.node_url, sender_index, n_tx_sender).await?;
 
-	send_funds(sender_index, chunk_size, n_tx_sender).await?;
+	send_funds(&args.node_url, sender_index, chunk_size, n_tx_sender).await?;
 		
 	Ok(())
 }
