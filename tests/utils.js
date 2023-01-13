@@ -19,8 +19,8 @@ async function run(nodeName, networkInfo, jsArgs) {
 
                 break;
             case "calculate_tps":
-                const totalTx = jsArgs[1];
-                cargoArgs = ['r', '--quiet', '--release', '--manifest-path', 'utils/tps/Cargo.toml', '--', '--node-url', wsUri, '-n', totalTx];
+                const n = jsArgs[1];
+                cargoArgs = ['r', '--quiet', '--release', '--manifest-path', 'utils/tps/Cargo.toml', '--', '--node-url', wsUri, '-n', n];
                 break;
             default:
                 throw new Error();
