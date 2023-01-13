@@ -22,15 +22,15 @@ struct Args {
 	node_url: String,
 
 	/// Sender index.
-	#[arg(short)]
-	i: usize,
+	#[arg(long)]
+	sender_index: usize,
 
 	/// Total number of senders
-	#[arg(long, short)]
-	total: usize,
+	#[arg(long)]
+	total_senders: usize,
 
 	/// Chunk size for sending the extrinsics.
-	#[arg(long, short, default_value_t = 50)]
+	#[arg(long, default_value_t = 50)]
 	chunk_size: usize,
 
 	/// Total number of pre-funded accounts (on funded-accounts.json).
@@ -128,13 +128,11 @@ fn generate_receivers(n: usize, sender_index: usize) -> Vec<sp_core::crypto::Acc
 async fn main() -> Result<(), Error> {
 	let args = Args::parse();
 
-	let sender_index = args.i;
-	let chunk_size = args.chunk_size;
-	let n_tx_sender = args.n / args.total;
+	let n_tx_sender = args.n / args.total_senders;
 
-	pre_conditions(&args.node_url, sender_index, n_tx_sender).await?;
+	pre_conditions(&args.node_url, args.sender_index, n_tx_sender).await?;
 
-	send_funds(&args.node_url, sender_index, chunk_size, n_tx_sender).await?;
+	send_funds(&args.node_url, args.sender_index, args.chunk_size, n_tx_sender).await?;
 		
 	Ok(())
 }
