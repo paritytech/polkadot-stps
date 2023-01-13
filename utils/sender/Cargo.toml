@@ -15,3 +15,6 @@ clap = { version = "4.0.32", features = ["derive"] }
 tokio = { version = "1.18.0", features = ["rt-multi-thread", "macros", "time"] }
 codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = ["derive", "full", "bit-vec"] }
 futures = "0.3.21"
+
+[[bin]]
+name = "sender"

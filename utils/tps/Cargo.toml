@@ -10,3 +10,6 @@ utils = { path = ".."}
 log = "0.4.16"
 clap = { version = "4.0.32", features = ["derive"] }
 tokio = { version = "1.18.0", features = ["rt-multi-thread", "macros", "time"] }
+
+[[bin]]
+name = "tps"
