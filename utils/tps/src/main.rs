@@ -7,7 +7,7 @@ use utils::{connect, runtime, Error};
 #[command(author, version, about, long_about = None)]
 struct Args {
    /// Node URL
-   #[arg(long, short)]
+   #[arg(long)]
    node_url: String,
 
    /// Total number of expected transactions
