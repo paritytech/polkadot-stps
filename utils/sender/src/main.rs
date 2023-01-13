@@ -126,6 +126,10 @@ fn generate_receivers(n: usize, sender_index: usize) -> Vec<sp_core::crypto::Acc
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
+	env_logger::init_from_env(
+		env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info"),
+	);
+
 	let args = Args::parse();
 
 	let n_tx_sender = args.n / args.total_senders;
