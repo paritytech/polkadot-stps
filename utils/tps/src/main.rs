@@ -1,6 +1,7 @@
 use log::*;
 use clap::Parser;
 use utils::{connect, runtime, Error};
+use tokio::time::{sleep, Duration};
 
 /// util program to count TPS
 #[derive(Parser, Debug)]
@@ -33,7 +34,13 @@ pub async fn calc_tps(node: &str, n: usize) -> Result<(), Error> {
 	let mut tps_vec = Vec::new();
 
 	loop {
-		let block_hash = api.rpc().block_hash(Some(block_n.into())).await?;
+		let mut block_hash = api.rpc().block_hash(Some(block_n.into())).await?;
+		while block_hash.is_none() {
+			info!("waiting for block finalization");
+			sleep(Duration::from_secs(6)).await;
+
+			block_hash = api.rpc().block_hash(Some(block_n.into())).await?;
+		}
 
 		let block_timestamp =
 			api.storage().fetch(&storage_timestamp_storage_addr, block_hash).await?.unwrap();
