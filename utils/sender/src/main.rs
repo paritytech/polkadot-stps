@@ -50,7 +50,7 @@ async fn send_funds(
 	let ext_deposit_addr = runtime::constants().balances().existential_deposit();
 	let ext_deposit = api.constants().at(&ext_deposit_addr)?;
 
-	info!("Node {}: signing {} transactions", sender_index, n_tx_sender);
+	info!("Sender {}: signing {} transactions", sender_index, n_tx_sender);
 	let mut txs = Vec::new();
 	for i in 0..n_tx_sender {
 		let shift = sender_index * n_tx_sender;
