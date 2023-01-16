@@ -1,6 +1,6 @@
 {
     "settings": {
-      "timeout": 1000000,
+      "timeout": 1000,
       "node_spawn_timeout": 1200
     },
     "relaychain": {
@@ -11,7 +11,7 @@
         "runtime": {
           "runtime_genesis_config": {
             "balances": {
-              "balances": {% include "./funded-accounts.json" %}
+              "balances": {% include "../funded-accounts.json" %}
             }
           }
         }
@@ -19,27 +19,14 @@
       "nodes": [
         {
           "name": "alice",
-          "validator": false,
+          "validator": true,
           "args": [
             "--alice",
             "-lparachain=debug",
-            "--no-hardware-benchmarks",
             "--pool-limit=1000000000",
             "--pool-kbytes=10000000000"
           ]
         }
-      ],
-      "node_groups": [
-	      {
-          "name": "stps",
-          "args": [
-            "-lparachain=debug",
-            "--no-hardware-benchmarks",
-            "--pool-limit=1000000000",
-            "--pool-kbytes=10000000000"
-          ],
-	       "count": 3
-	      }
       ]
     },
     "types": {

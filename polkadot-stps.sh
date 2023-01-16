@@ -10,8 +10,8 @@ print_help() {
   echo "Polkadot sTPS"
   echo ""
   echo "$ ./polkadot-stps.sh init"
-  echo "$ ./polkadot-stps.sh test tests/relay.zndsl"
-  echo "$ ./polkadot-stps.sh test_native tests/relay-single-node-native.zndsl"
+  echo "$ ./polkadot-stps.sh test_kubernetes tests/kubernetes/relay.zndsl"
+  echo "$ ./polkadot-stps.sh test_native tests/native/relay-single-node-native.zndsl"
 }
 
 fetch_zombienet() {
@@ -64,7 +64,7 @@ init_gcloud() {
   fi
 }
 
-stps_test() {
+stps_test_kubernetes() {
   stps_init_kubernetes
   export PATH=.:$PATH
   ./zombienet-linux test --provider kubernetes $1
