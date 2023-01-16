@@ -1,19 +1,19 @@
-use log::*;
 use clap::Parser;
-use utils::{connect, runtime, Error, Api};
+use log::*;
 use tokio::time::{sleep, Duration};
+use utils::{connect, runtime, Api, Error};
 
 /// util program to count TPS
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-   /// Node URL
-   #[arg(long)]
-   node_url: String,
+	/// Node URL
+	#[arg(long)]
+	node_url: String,
 
-   /// Total number of expected transactions
-   #[arg(short)]
-   n: usize,
+	/// Total number of expected transactions
+	#[arg(short)]
+	n: usize,
 }
 
 pub async fn calc_tps(api: &Api, n: usize) -> Result<(), Error> {
@@ -84,4 +84,3 @@ async fn main() -> Result<(), Error> {
 
 	Ok(())
 }
-

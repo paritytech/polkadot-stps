@@ -1,3 +1,4 @@
+use clap::Parser;
 use codec::Decode;
 use futures::future::try_join_all;
 use log::*;
@@ -6,8 +7,7 @@ use subxt::{
 	tx::{BaseExtrinsicParamsBuilder as Params, Era, PairSigner},
 	PolkadotConfig,
 };
-use clap::Parser;
-use utils::{connect, runtime, Error, DERIVATION, Api};
+use utils::{connect, runtime, Api, Error, DERIVATION};
 
 mod pre;
 
@@ -62,7 +62,10 @@ async fn send_funds(
 		txs.push(signed_tx);
 	}
 
-	info!("Sender {}: sending {} transactions in chunks of {}", sender_index, n_tx_sender, chunk_size);
+	info!(
+		"Sender {}: sending {} transactions in chunks of {}",
+		sender_index, n_tx_sender, chunk_size
+	);
 	let mut last_now = std::time::Instant::now();
 	let mut last_sent = 0;
 	let start = std::time::Instant::now();
@@ -103,8 +106,7 @@ async fn send_funds(
 }
 
 pub fn generate_signer(i: usize) -> PairSigner<PolkadotConfig, SrPair> {
-	let pair: SrPair =
-		Pair::from_string(format!("{}{}", DERIVATION, i).as_str(), None).unwrap();
+	let pair: SrPair = Pair::from_string(format!("{}{}", DERIVATION, i).as_str(), None).unwrap();
 	let signer: PairSigner<PolkadotConfig, SrPair> = PairSigner::new(pair);
 	signer
 }
@@ -137,7 +139,7 @@ async fn main() -> Result<(), Error> {
 	pre_conditions(&api, args.sender_index, n_tx_sender).await?;
 
 	send_funds(&api, args.sender_index, args.chunk_size, n_tx_sender).await?;
-		
+
 	Ok(())
 }
 

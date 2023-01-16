@@ -1,3 +1,4 @@
+use clap::Parser;
 use futures::future::try_join_all;
 use serde_json::Value;
 use sp_core::{sr25519::Pair as SrPair, Pair};
@@ -9,7 +10,6 @@ use std::{
 	path::{Path, PathBuf},
 };
 use subxt::{tx::PairSigner, PolkadotConfig};
-use clap::Parser;
 use utils::{Error, DERIVATION};
 
 const DEFAULT_FUNDED_JSON_PATH: &str = "funded-accounts.json";
@@ -40,21 +40,14 @@ const FUNDS: u64 = 10_000_000_000_000_000;
 /// * `n` - The minimum number of accounts to create. The order of accounts is unspecified.
 /// * `path` - The path to write the JSON file to.
 /// * `threads` - The number of threads to use for deriving the accounts.
-pub async fn funded_accounts_json(
-	n: usize,
-	path: &Path,
-	threads: usize,
-) -> Result<(), Error> {
+pub async fn funded_accounts_json(n: usize, path: &Path, threads: usize) -> Result<(), Error> {
 	let accounts = derive_accounts_json(n, threads).await?;
 
 	let mut file = File::create(path)?;
 	serde_json::to_writer_pretty(&mut file, &accounts).map_err(Into::into)
 }
 
-pub async fn derive_accounts_json(
-	n: usize,
-	threads: usize,
-) -> Result<Value, Error> {
+pub async fn derive_accounts_json(n: usize, threads: usize) -> Result<Value, Error> {
 	let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(threads).build()?;
 	// Round n up to the next multiple of threads.
 	let n = (n + threads - 1) / threads * threads;
@@ -114,7 +107,6 @@ pub fn n_accounts(json_path: &PathBuf) -> usize {
 	json_array.len()
 }
 
-
 #[tokio::main]
 async fn main() -> Result<(), Error> {
 	env_logger::init_from_env(
@@ -122,8 +114,8 @@ async fn main() -> Result<(), Error> {
 	);
 
 	let args = Args::parse();
-	
+
 	funded_accounts_json(args.n, &args.output, args.threads).await?;
-	
+
 	Ok(())
 }
