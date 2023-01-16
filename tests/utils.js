@@ -3,14 +3,14 @@ const { spawn, ChildProcess } = require('child_process');
 async function run(nodeName, networkInfo, jsArgs) {
     const {wsUri} = networkInfo.nodesByName[nodeName];
     const cmd = jsArgs[0];
+    const totalSenders = jsArgs[1];
+    const totalTx = jsArgs[2];
     let senderIndex = nodeName.split("-")[1];
 
     return new Promise((resolve, _reject) => {
         let cargoArgs;
         switch(cmd) {
             case "send_balance_transfers":
-                const totalSenders = jsArgs[1];
-                const totalTx = jsArgs[2];
                 if (senderIndex) {
                     cargoArgs = ['r', '--quiet', '--release', '--manifest-path', 'utils/sender/Cargo.toml', '--', '--node-url', wsUri, '--sender-index', senderIndex, '--total-senders', totalSenders, '-n', totalTx];
                 } else {
@@ -19,8 +19,7 @@ async function run(nodeName, networkInfo, jsArgs) {
 
                 break;
             case "calculate_tps":
-                const n = jsArgs[1];
-                cargoArgs = ['r', '--quiet', '--release', '--manifest-path', 'utils/tps/Cargo.toml', '--', '--node-url', wsUri, '-n', n];
+                cargoArgs = ['r', '--quiet', '--release', '--manifest-path', 'utils/tps/Cargo.toml', '--', '--node-url', wsUri, '-n', totalTx, '--total-senders', totalSenders];
                 break;
             default:
                 throw new Error();

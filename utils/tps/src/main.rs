@@ -11,6 +11,10 @@ struct Args {
 	#[arg(long)]
 	node_url: String,
 
+	/// Total number of senders
+	#[arg(long)]
+	total_senders: usize,
+
 	/// Total number of expected transactions
 	#[arg(short)]
 	n: usize,
@@ -79,8 +83,10 @@ async fn main() -> Result<(), Error> {
 
 	let args = Args::parse();
 
+	let n_tx_truncated = (args.n / args.total_senders) * args.total_senders;
+
 	let api = connect(&args.node_url).await?;
-	calc_tps(&api, args.n).await?;
+	calc_tps(&api, n_tx_truncated).await?;
 
 	Ok(())
 }
