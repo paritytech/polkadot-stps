@@ -38,7 +38,7 @@ pub async fn calc_tps(api: &Api, n: usize) -> Result<(), Error> {
 	loop {
 		let mut block_hash = api.rpc().block_hash(Some(block_n.into())).await?;
 		while block_hash.is_none() {
-			info!("waiting for block finalization");
+			info!("waiting for finalization of block {}", block_n);
 			sleep(Duration::from_secs(6)).await;
 
 			block_hash = api.rpc().block_hash(Some(block_n.into())).await?;
