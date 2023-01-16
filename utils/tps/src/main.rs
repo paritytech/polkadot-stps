@@ -1,6 +1,6 @@
 use log::*;
 use clap::Parser;
-use utils::{connect, runtime, Error};
+use utils::{connect, runtime, Error, Api};
 use tokio::time::{sleep, Duration};
 
 /// util program to count TPS
@@ -16,9 +16,7 @@ struct Args {
    n: usize,
 }
 
-pub async fn calc_tps(node: &str, n: usize) -> Result<(), Error> {
-	let api = connect(node).await?;
-
+pub async fn calc_tps(api: &Api, n: usize) -> Result<(), Error> {
 	let storage_timestamp_storage_addr = runtime::storage().timestamp().now();
 
 	let block_1_hash = api.rpc().block_hash(Some(1u32.into())).await?;
@@ -81,7 +79,8 @@ async fn main() -> Result<(), Error> {
 
 	let args = Args::parse();
 
-	calc_tps(&args.node_url, args.n).await?;
+	let api = connect(&args.node_url).await?;
+	calc_tps(&api, args.n).await?;
 
 	Ok(())
 }

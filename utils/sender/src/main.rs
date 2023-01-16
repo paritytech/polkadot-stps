@@ -7,7 +7,7 @@ use subxt::{
 	PolkadotConfig,
 };
 use clap::Parser;
-use utils::{connect, runtime, Error, DERIVATION};
+use utils::{connect, runtime, Error, DERIVATION, Api};
 
 mod pre;
 
@@ -39,13 +39,12 @@ struct Args {
 }
 
 async fn send_funds(
-	node_url: &str,
+	api: &Api,
 	sender_index: usize,
 	chunk_size: usize,
 	n_tx_sender: usize,
 ) -> Result<(), Error> {
 	let receivers = generate_receivers(n_tx_sender, sender_index); // one receiver per tx
-	let api = connect(node_url).await?;
 
 	let ext_deposit_addr = runtime::constants().balances().existential_deposit();
 	let ext_deposit = api.constants().at(&ext_deposit_addr)?;
@@ -132,11 +131,12 @@ async fn main() -> Result<(), Error> {
 
 	let args = Args::parse();
 
+	let api = connect(&args.node_url).await?;
 	let n_tx_sender = args.n / args.total_senders;
 
-	pre_conditions(&args.node_url, args.sender_index, n_tx_sender).await?;
+	pre_conditions(&api, args.sender_index, n_tx_sender).await?;
 
-	send_funds(&args.node_url, args.sender_index, args.chunk_size, n_tx_sender).await?;
+	send_funds(&api, args.sender_index, args.chunk_size, n_tx_sender).await?;
 		
 	Ok(())
 }
