@@ -9,7 +9,7 @@ use utils::{Api, connect, runtime, Error, DERIVATION};
 pub async fn pre_conditions(node_url: &str, i: usize, n: usize) -> Result<(), Error> {
 	let api = connect(node_url).await?;
 
-	info!("Sender {}: checking pre-conditions of accounts {}{} through {}{}", i, DERIVATION, i*n, DERIVATION, (i+1)*n);
+	info!("Sender {}: checking pre-conditions of accounts {}{} through {}{}", i, DERIVATION, i*n, DERIVATION, (i+1)*n - 1);
 
 	for j in i*n..(i+1)*n {
 		let pair: SrPair = Pair::from_string(format!("{}{}", DERIVATION, j).as_str(), None).unwrap();
