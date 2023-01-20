@@ -3,22 +3,22 @@
 set -e
 
 POLKADOT_V=v0.9.33
-ZOMBIENET_V=v1.3.5
+ZOMBIENET_V=v1.3.28
 CLUSTER_ID="gke_parity-zombienet_europe-west3-b_parity-zombienet"
 
 print_help() {
   echo "Polkadot sTPS"
   echo ""
-  echo "$ ./polkadot-stps.sh init"
+  echo "$ ./polkadot-stps.sh init_native"
   echo "$ ./polkadot-stps.sh test_kubernetes tests/kubernetes/relay.zndsl"
   echo "$ ./polkadot-stps.sh test_native tests/native/relay-single-node-native.zndsl"
 }
 
 fetch_zombienet() {
-  if [ ! -s zombienet-linux ]; then
+  if [ ! -s zombienet-linux-x64 ]; then
     echo "fetching zombienet executable..."
-    wget --quiet https://github.com/paritytech/zombienet/releases/download/$ZOMBIENET_V/zombienet-linux
-    chmod +x zombienet-linux
+    wget --quiet https://github.com/paritytech/zombienet/releases/download/$ZOMBIENET_V/zombienet-linux-x64
+    chmod +x zombienet-linux-x64
   fi
 }
 
@@ -67,13 +67,13 @@ init_gcloud() {
 stps_test_kubernetes() {
   stps_init_kubernetes
   export PATH=.:$PATH
-  ./zombienet-linux test --provider kubernetes $1
+  ./zombienet-linux-x64 test --provider kubernetes $1
 }
 
 stps_test_native() {
   stps_init_native
   export PATH=.:$PATH
-  ./zombienet-linux test --provider native $1
+  ./zombienet-linux-x64 test --provider native $1
 }
 
 stps_init_kubernetes() {
