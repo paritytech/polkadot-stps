@@ -20,6 +20,7 @@
         {
           "name": "alice",
           "validator": true,
+          "ws_port": 9944,
           "args": [
             "--alice",
             "-lparachain=debug",
