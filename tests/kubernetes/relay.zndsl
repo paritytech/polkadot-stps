@@ -4,8 +4,9 @@ Creds: config
 alice: is up within 600 secs
 
 # Sending the extrinsics
-stps: js-script ../utils.js with "send_balance_transfers,3,16384" return is 0 within 1200 secs
+stps-0: run ./sender.sh with "0,3,16384" within 200 seconds
+stps-1: run ./sender.sh with "1,3,16384" within 200 seconds
+stps-2: run ./sender.sh with "2,3,16384" within 200 seconds
 
 # Calculate TPS.
-# TODO return the TPS and assert its value.
 alice: js-script ../utils.js with "calculate_tps,3,16384" return is 0 within 600 secs

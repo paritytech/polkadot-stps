@@ -32,6 +32,7 @@
       "node_groups": [
 	      {
           "name": "stps",
+          "ws_port": 9944,
           "args": [
             "-lparachain=debug",
             "--no-hardware-benchmarks",
