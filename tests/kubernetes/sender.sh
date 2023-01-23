@@ -1,10 +1,8 @@
-#!/bin/bash
-
 set -e
 SENDER_EXECUTABLE="https://storage.googleapis.com/zombienet-db-snaps/stps/sender"
 
 if [ ! -s sender ]; then
-    curl -o sender https://storage.googleapis.com/zombienet-db-snaps/stps/sender
+    curl -o sender $SENDER_EXECUTABLE
     chmod +x sender
 fi
 
