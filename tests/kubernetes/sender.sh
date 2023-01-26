@@ -6,4 +6,4 @@ if [ ! -s sender ]; then
     chmod +x /tmp/sender
 fi
 
-/tmp/sender --node-url ws://127.0.0.1:9944 --sender-index $1 --total-senders $2 -n $3
+/tmp/sender --node-url ws://127.0.0.1:$1 --sender-index $2 --total-senders $3 -n $4
