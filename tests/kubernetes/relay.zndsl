@@ -9,7 +9,7 @@ alice: is up within 600 secs
 {%- endfor %}
 
 # Sending the extrinsics
-stps: run ./sender.sh with "9944,NODES,16384" within 200 seconds
+stps: run ./sender.sh with "9944,{{NODES}},16384" within 200 seconds
 
 # Calculate TPS.
-alice: js-script ../utils.js with "calculate_tps,NODES,16384" return is 0 within 600 secs
+alice: js-script ../utils.js with "calculate_tps,{{NODES}},16384" return is 0 within 600 secs
