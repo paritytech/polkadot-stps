@@ -1,0 +1,52 @@
+{
+    "settings": {
+      "timeout": 1000000,
+      "node_spawn_timeout": 1200
+    },
+    "relaychain": {
+      "default_image": "docker.io/parity/polkadot:latest",
+      "chain": "rococo-local",
+      "default_command": "./polkadot",
+      "genesis": {
+        "runtime": {
+          "runtime_genesis_config": {
+            "balances": {
+              "balances": {% include "../funded-accounts.json" %}
+            }
+          }
+        }
+      },
+      "nodes": [
+        {
+          "name": "alice",
+          "validator": false,
+          "args": [
+            "--alice",
+            "-lparachain=debug",
+            "--no-hardware-benchmarks",
+            "--pool-limit=1000000000",
+            "--pool-kbytes=10000000000"
+          ]
+        }
+      ],
+      "node_groups": [
+	      {
+          "name": "stps",
+          "args": [
+            "-lparachain=debug",
+            "--no-hardware-benchmarks",
+            "--pool-limit=1000000000",
+            "--pool-kbytes=10000000000"
+          ],
+	       "count": 3
+	      }
+      ]
+    },
+    "types": {
+      "Header": {
+        "number": "u64",
+        "parent_hash": "Hash",
+        "post_state": "Hash"
+      }
+    }
+  }

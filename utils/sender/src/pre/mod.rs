@@ -1,31 +1,35 @@
+use log::*;
 use sp_core::{sr25519::Pair as SrPair, Pair};
 use sp_runtime::AccountId32;
 use subxt::{tx::PairSigner, PolkadotConfig};
 
-use crate::shared::{connect, runtime, Error};
+use utils::{runtime, Api, Error, DERIVATION};
 
-/// Check first and last accounts
-pub async fn pre_conditions(node: &str, derivation: &str, n: usize) -> Result<(), Error> {
-	let pair_0: SrPair = Pair::from_string(format!("{}{}", derivation, 0).as_str(), None).unwrap();
-	let signer_0: PairSigner<PolkadotConfig, SrPair> = PairSigner::new(pair_0);
-	let account_0 = signer_0.account_id();
+/// Check pre-conditions of accounts attributed to this sender
+pub async fn pre_conditions(api: &Api, i: usize, n: usize) -> Result<(), Error> {
+	info!(
+		"Sender {}: checking pre-conditions of accounts {}{} through {}{}",
+		i,
+		DERIVATION,
+		i * n,
+		DERIVATION,
+		(i + 1) * n - 1
+	);
 
-	check_account(node, account_0).await?;
+	for j in i * n..(i + 1) * n {
+		let pair: SrPair =
+			Pair::from_string(format!("{}{}", DERIVATION, j).as_str(), None).unwrap();
+		let signer: PairSigner<PolkadotConfig, SrPair> = PairSigner::new(pair);
+		let account = signer.account_id();
 
-	let pair_n: SrPair =
-		Pair::from_string(format!("{}{}", derivation, n - 1).as_str(), None).unwrap();
-	let signer_n: PairSigner<PolkadotConfig, SrPair> = PairSigner::new(pair_n);
-	let account_n = signer_n.account_id();
-
-	check_account(node, account_n).await?;
+		check_account(&api, account).await?;
+	}
 
 	Ok(())
 }
 
 /// Check account nonce and free balance
-async fn check_account(node: &str, account: &AccountId32) -> Result<(), Error> {
-	let api = connect(node).await?;
-
+async fn check_account(api: &Api, account: &AccountId32) -> Result<(), Error> {
 	let ext_deposit_addr = runtime::constants().balances().existential_deposit();
 	let ext_deposit = api.constants().at(&ext_deposit_addr)?;
 

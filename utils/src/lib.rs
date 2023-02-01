@@ -15,9 +15,11 @@ pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub const MAX_ATTEMPTS: usize = 10;
 /// Delay period between failed connection attempts.
 pub const RETRY_DELAY: Duration = Duration::from_secs(1);
+/// Default derivation path for pre-funded accounts
+pub const DERIVATION: &str = "//Sender/";
 
 /// Tries [`MAX_ATTEMPTS`] times to connect to the given node.
-pub(crate) async fn connect(url: &str) -> Result<Api, Error> {
+pub async fn connect(url: &str) -> Result<Api, Error> {
 	for i in 1..=MAX_ATTEMPTS {
 		info!("Attempt #{}: Connecting to {}", i, url);
 		let promise = OnlineClient::<PolkadotConfig>::from_url(url);

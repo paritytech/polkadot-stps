@@ -11,7 +11,7 @@
         "runtime": {
           "runtime_genesis_config": {
             "balances": {
-              "balances": {% include "./funded-accounts.json" %}
+              "balances": {% include "../funded-accounts.json" %}
             }
           }
         }
@@ -20,6 +20,7 @@
         {
           "name": "alice",
           "validator": true,
+          "ws_port": 9944,
           "args": [
             "--alice",
             "-lparachain=debug",

@@ -1,10 +1,26 @@
+use clap::Parser;
 use log::*;
+use tokio::time::{sleep, Duration};
+use utils::{connect, runtime, Api, Error};
 
-use crate::shared::{connect, runtime, Error};
+/// util program to count TPS
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+	/// Node URL
+	#[arg(long)]
+	node_url: String,
 
-pub async fn calc_tps(node: &str, n: usize) -> Result<(), Error> {
-	let api = connect(node).await?;
+	/// Total number of senders
+	#[arg(long)]
+	total_senders: usize,
 
+	/// Total number of expected transactions
+	#[arg(short)]
+	n: usize,
+}
+
+pub async fn calc_tps(api: &Api, n: usize) -> Result<(), Error> {
 	let storage_timestamp_storage_addr = runtime::storage().timestamp().now();
 
 	let block_1_hash = api.rpc().block_hash(Some(1u32.into())).await?;
@@ -20,7 +36,13 @@ pub async fn calc_tps(node: &str, n: usize) -> Result<(), Error> {
 	let mut tps_vec = Vec::new();
 
 	loop {
-		let block_hash = api.rpc().block_hash(Some(block_n.into())).await?;
+		let mut block_hash = api.rpc().block_hash(Some(block_n.into())).await?;
+		while block_hash.is_none() {
+			info!("waiting for finalization of block {}", block_n);
+			sleep(Duration::from_secs(6)).await;
+
+			block_hash = api.rpc().block_hash(Some(block_n.into())).await?;
+		}
 
 		let block_timestamp =
 			api.storage().fetch(&storage_timestamp_storage_addr, block_hash).await?.unwrap();
@@ -49,6 +71,22 @@ pub async fn calc_tps(node: &str, n: usize) -> Result<(), Error> {
 			break;
 		}
 	}
+
+	Ok(())
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Error> {
+	env_logger::init_from_env(
+		env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info"),
+	);
+
+	let args = Args::parse();
+
+	let n_tx_truncated = (args.n / args.total_senders) * args.total_senders;
+
+	let api = connect(&args.node_url).await?;
+	calc_tps(&api, n_tx_truncated).await?;
 
 	Ok(())
 }

@@ -1,3 +1,4 @@
+use clap::Parser;
 use futures::future::try_join_all;
 use serde_json::Value;
 use sp_core::{sr25519::Pair as SrPair, Pair};
@@ -9,8 +10,26 @@ use std::{
 	path::{Path, PathBuf},
 };
 use subxt::{tx::PairSigner, PolkadotConfig};
+use utils::{Error, DERIVATION};
 
-use crate::shared::Error;
+const DEFAULT_FUNDED_JSON_PATH: &str = "funded-accounts.json";
+
+/// util program to derive pre-funded accounts
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+	/// The number of pre-funded accounts to derive
+	#[arg(short, default_value_t = 500000)]
+	n: usize,
+
+	/// Path to write the funded accounts to.
+	#[arg(long, short, default_value = DEFAULT_FUNDED_JSON_PATH)]
+	output: PathBuf,
+
+	/// Number of threads to derive accounts with.
+	#[arg(long, short, default_value = "4")]
+	threads: usize,
+}
 
 /// Initial funds for a genesis account.
 const FUNDS: u64 = 10_000_000_000_000_000;
@@ -21,23 +40,14 @@ const FUNDS: u64 = 10_000_000_000_000_000;
 /// * `n` - The minimum number of accounts to create. The order of accounts is unspecified.
 /// * `path` - The path to write the JSON file to.
 /// * `threads` - The number of threads to use for deriving the accounts.
-pub async fn funded_accounts_json(
-	derivation_blueprint: &str,
-	n: usize,
-	path: &Path,
-	threads: usize,
-) -> Result<(), Error> {
-	let accounts = derive_accounts_json(derivation_blueprint, n, threads).await?;
+pub async fn funded_accounts_json(n: usize, path: &Path, threads: usize) -> Result<(), Error> {
+	let accounts = derive_accounts_json(n, threads).await?;
 
 	let mut file = File::create(path)?;
 	serde_json::to_writer_pretty(&mut file, &accounts).map_err(Into::into)
 }
 
-pub async fn derive_accounts_json(
-	derivation_blueprint: &str,
-	n: usize,
-	threads: usize,
-) -> Result<Value, Error> {
+pub async fn derive_accounts_json(n: usize, threads: usize) -> Result<Value, Error> {
 	let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(threads).build()?;
 	// Round n up to the next multiple of threads.
 	let n = (n + threads - 1) / threads * threads;
@@ -51,8 +61,7 @@ pub async fn derive_accounts_json(
 		let start = i * per_thread;
 		let end = start + per_thread;
 
-		let blueprint = derivation_blueprint.to_string();
-		let f = rt.spawn(async move { derive_accounts(&blueprint, start..end).await });
+		let f = rt.spawn(async move { derive_accounts(start..end).await });
 		futures.push(f);
 	}
 
@@ -76,10 +85,10 @@ pub async fn derive_accounts_json(
 	serde_json::to_value(&funded_accounts).map_err(Into::into)
 }
 
-async fn derive_accounts(derivation_blueprint: &str, range: Range<usize>) -> Vec<AccountId32> {
+async fn derive_accounts(range: Range<usize>) -> Vec<AccountId32> {
 	range
 		.map(|i| {
-			let derivation = format!("{}{}", derivation_blueprint, i);
+			let derivation = format!("{}{}", DERIVATION, i);
 			let pair: SrPair = Pair::from_string(&derivation, None).unwrap();
 			let signer: PairSigner<PolkadotConfig, SrPair> = PairSigner::new(pair);
 			signer.account_id().clone()
@@ -96,4 +105,17 @@ pub fn n_accounts(json_path: &PathBuf) -> usize {
 	let json: Value = serde_json::from_slice(&json_bytes).unwrap();
 	let json_array = json.as_array().unwrap();
 	json_array.len()
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Error> {
+	env_logger::init_from_env(
+		env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info"),
+	);
+
+	let args = Args::parse();
+
+	funded_accounts_json(args.n, &args.output, args.threads).await?;
+
+	Ok(())
 }

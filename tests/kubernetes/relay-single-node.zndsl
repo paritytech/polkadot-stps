@@ -1,0 +1,13 @@
+Network: ./relay-single-node.json
+Creds: config
+
+alice: is up within 600 secs
+
+# Setting sender indexes
+alice: run ./set_sender_index.sh with "0" within 1 seconds
+
+# Sending the extrinsics
+alice: run ./sender.sh with "9944,1,16384" within 200 seconds
+
+# Calculate TPS.
+alice: js-script ../utils.js with "calculate_tps,1,16384" return is 0 within 600 secs
