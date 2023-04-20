@@ -1,0 +1,17 @@
+FROM rust:latest as builder
+
+COPY . /build
+
+WORKDIR /build/utils/sender
+
+RUN cargo build
+
+FROM docker.io/library/ubuntu:20.04
+
+COPY --from=builder /build/utils/sender/target/debug/sender /usr/local/bin
+
+RUN useradd -m -u 1000 -U -s /bin/sh -d /sender sender
+
+USER sender
+
+ENTRYPOINT [ "/usr/local/bin/sender" ]
