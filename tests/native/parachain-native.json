@@ -1,0 +1,36 @@
+{
+  "settings": {
+    "timeout": 1000
+  },
+  "relaychain": {
+    "chain": "rococo-local",
+    "default_command": "polkadot",
+    "nodes": [
+      {
+        "name": "alice",
+        "extra_args": [
+          "--alice"
+        ]
+      },
+      {
+        "name": "bob",
+        "extra_args": [
+          "--bob"
+        ]
+      }
+    ]
+  },
+  "parachains": [
+    {
+      "id": 100,
+      "cumulus_based": false,
+      "collator": {
+        "name": "collator01",
+        "command": "adder-collator",
+        "args": [
+          "-lparachain=debug"
+        ]
+      }
+    }
+  ]
+}
