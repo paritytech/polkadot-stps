@@ -18,6 +18,6 @@ spec:
         image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         args:
-          {{ range .Values.containerArgs }}
-          - {{ . }}
-          {{ end }}
+          {{- range $key, $val := .Values.containerArguments }}
+          - --{{ $key }}={{ $val }}
+          {{- end }}

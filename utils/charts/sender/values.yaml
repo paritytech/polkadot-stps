@@ -5,16 +5,16 @@
 replicaCount: 1
 
 image:
-  repository: localhost:5000/sender
+  repository: localhost:5000/stps-sender
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   tag: "latest"
 
-containerArgs:
-  node-url: ""
-  sender-index: ""
-  total-senders: ""
-  n: ""
+containerArguments:
+  node-url: "localrococo-validator-a-node.rococo.svc.cluster.local:9944"
+  sender-index: "0"
+  total-senders: "1"
+  num: "1684"
 
 imagePullSecrets: []
 nameOverride: ""
