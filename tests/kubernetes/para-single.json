@@ -6,15 +6,6 @@
     "default_image": "docker.io/parity/polkadot:latest",
     "chain": "rococo-local",
     "default_command": "polkadot",
-    "genesis": {
-      "runtime": {
-        "runtime_genesis_config": {
-          "balances": {
-            "balances": {% include "../funded-accounts.json" %}
-          }
-        }
-      }
-    },
     "nodes": [
       {
         "name": "alice",

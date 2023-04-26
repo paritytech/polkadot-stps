@@ -22,11 +22,12 @@
   },
   "parachains": [
     {
-      "id": 100,
-      "cumulus_based": false,
+      "id": 1000,
+      "cumulus_based": true,
       "collator": {
         "name": "collator01",
-        "command": "adder-collator",
+        "ws_port": "9999",
+        "command": "polkadot-parachain",
         "args": [
           "-lparachain=debug"
         ]
