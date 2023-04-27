@@ -2,9 +2,25 @@ use log::{error, info, warn};
 use std::time::Duration;
 use subxt::{OnlineClient, PolkadotConfig};
 
-/// The runtime used by all other crates.
-#[subxt::subxt(runtime_metadata_path = "metadata.scale")]
+/// Check the feature flags
+#[cfg(all(feature = "rococo", feature = "tick"))]
+compile_error!("`rococo` and `tick` are mutually exclusive features!");
+
+#[cfg(not(any(feature = "rococo", feature = "tick")))]
+compile_error!("Either `rococo`, or `tick` must be passed as a feature!");
+
+/// The polkadot runtime used by all other crates.
+/// Use this feature when planning on sending TPS to validators.
+#[cfg(feature = "rococo")]
+#[subxt::subxt(runtime_metadata_path = "rococo-meta.scale")]
 pub mod runtime {}
+
+/// The polkadot-parachain runtime used by all other crates.
+/// Use this feature when planning on sending TPS to parachains.
+#[cfg(feature = "tick")]
+#[subxt::subxt(runtime_metadata_path = "tick-meta.scale")]
+pub mod runtime {}
+
 
 /// Api of the runtime.
 pub type Api = OnlineClient<PolkadotConfig>;
