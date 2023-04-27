@@ -16,6 +16,5 @@ subxt = "0.25.0"
 log = "0.4.16"
 
 [features]
-default = [ "rococo" ]
 rococo = []
 tick = []
