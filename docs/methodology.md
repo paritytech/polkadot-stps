@@ -29,6 +29,12 @@ The Rust crate under [`utils`](https://github.com/paritytech/polkadot-stps/tree/
 - `sender`: Generates one pre-signed transaction per pre-funded account, and submits them in batches (to avoid clogging up the transaction pool).
 - `tps`: After the every pre-funded account has submitted its transaction, this module sweeps every block since genesis while counting how many balance transfer events were emitted in each block, and also calculating the overall average (s)TPS (by checking block timestamps).
 
+### Conditional compilation
+Note that the `utils/src/lib.rs` file contains a `subxt` macro which is responsible for generating the runtime metadata for the different Rust binaries defined in `utils`. More recentlly, the `tick-meta.scale` metadata has been included as an alternative to the `metadata.scale` runtime metadata to also support connecting the `sTPS` binaries to a `polkadot-parachain` (this is usually referred to as the `tick-collator`, hence the metadata name) collator. This means that if you are compiling the binaries, you now have to specify whether to compile for `rococo`, or the `tick` collator by passing feature flags in this way for example:
+```
+$ cargo build --features tick --release
+```
+
 ## Shell Script
 The `polkadot-stps.sh` script automates the process of bootstrapping the setup, namely:
 - fetching the `zombienet-linux` executable binary on a specific version.
