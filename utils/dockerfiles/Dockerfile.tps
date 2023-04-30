@@ -4,11 +4,13 @@ COPY . /build
 
 WORKDIR /build/utils/tps
 
-ARG feature_flag
+# ARG feature_flag
 
-ENV FEATURE=${feature_flag}
+# ENV FEATURE=${feature_flag}
 
-RUN cargo build --features=$FEATURE --release
+# RUN cargo build --features=$FEATURE --release
+
+RUN cargo build --release
 
 FROM docker.io/library/ubuntu:20.04
 
