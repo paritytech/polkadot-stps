@@ -4,13 +4,11 @@ COPY . /build
 
 WORKDIR /build/utils/sender
 
-# ARG feature_flag
+ARG feature_flag
 
-# ENV FEATURE=${feature_flag}
+ENV FEATURE=${feature_flag}
 
-# RUN cargo build --features=$FEATURE --release
-
-RUN cargo build --release
+RUN cargo build --features=$FEATURE --release
 
 FROM docker.io/library/ubuntu:20.04
 
