@@ -19,3 +19,7 @@ futures = "0.3.21"
 
 [[bin]]
 name = "sender"
+
+[features]
+tick = ["utils/tick"]
+rococo = ["utils/rococo"]
