@@ -1,9 +1,25 @@
-# Default values for tps.
+# Default values for common.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
-replicaCount: 1
+## Provide a name in place of node for `app:` labels
+##
+nameOverride: ""
 
+## Provide a name to substitute for the full names of resources
+##
+fullnameOverride: ""
+
+## Provide a name to substitute for the full names of resources
+##
+namespaceOverride: ""
+
+## Additional common labels on resources
+##
+extraLabels: {}
+
+## Image to use for the chart
+##
 image:
   repository: localhost:5000/stps-tps
   pullPolicy: IfNotPresent
@@ -12,39 +28,115 @@ image:
 
 containerArguments:
   node-url: "localrococo-validator-a-node.rococo.svc.cluster.local:9944"
+  sender-index: "0"
   total-senders: "1"
   num: "1684"
 
-imagePullSecrets: []
-nameOverride: ""
-fullnameOverride: ""
+## Override default container args
+##
+args: []
 
+## Number of replicas for the pod
+##
+replicaCount: 1
+
+## Reference to one or more secrets to be used when pulling images
+## ref: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+##
+imagePullSecrets: []
+
+## Service account for the pod to use
+## ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
+##
 serviceAccount:
-  # Specifies whether a service account should be created
   create: true
-  # Annotations to add to the service account
   annotations: {}
-  # The name of the service account to use.
-  # If not set and create is true, a name is generated using the fullname template
+    ## uncomment if you're using workload indentity
+    ##
+    # iam.gke.io/gcp-service-account: 'mysa@gcp-project-id.iam.gserviceaccount.com'
+
+  ## The name of the service account to use.
+  ## If not set and create is true, a name is generated using the fullname template
+  ##
   name: ""
 
+## Annotations to add to the pod
+##
 podAnnotations: {}
 
+## SecurityContext holds pod-level security attributes and common container settings.
+## This defaults to non root user with uid 1000 and gid 1000.
+## ref: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+##
 podSecurityContext: {}
-  # fsGroup: 2000
-
-securityContext: {}
+  # fsGroup: 1000
+  # runAsNonRoot: true
+  # runAsUser: 1000
+  # runAsGroup: 1000
+containerSecurityContext: {}
   # capabilities:
   #   drop:
   #   - ALL
   # readOnlyRootFilesystem: true
   # runAsNonRoot: true
   # runAsUser: 1000
+  # runAsGroup: 1000
 
+## Environment variable to add to the pods
+##
+env: {}
+  # VAR: "value"
+  # VAR2:
+  #   valueFrom:
+  #     secretKeyRef:
+  #       key: my-key
+  #       name: env-secret
+
+## Environment variables from secrets or configmaps to add to the pods
+##
+envFrom: []
+#  - configMapRef:
+#      name: env-configmap
+#  - secretRef:
+#      name: env-secret
+
+
+## Additional Pod Spec
+##
+additionalPodSpec: {}
+
+## Creates a secret resource
+## The value must be base64 encoded
+##
+secrets: {}
+# admin: <base64-encoded>
+
+# https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+# privateRegistry:
+#  dockerconfigjson: <base64-encoded>
+
+## Creates a configmap resource
+##
+config: {}
+
+## Creates a service resource
+##
 service:
+  annotations: {}
   type: ClusterIP
-  port: 666
+  sessionAffinity: ""
+  ports:
+    # - name: http
+    #   port: 80
+    #   targetPort: 8080
+    #   protocol: TCP
+    # - name: rpc
+    #   port: 9090
+    #   targetPort: 9090
+    #   protocol: TCP
 
+## Creates an ingress resource
+##
 ingress:
   enabled: false
   className: ""
@@ -56,11 +148,13 @@ ingress:
       paths:
         - path: /
           pathType: ImplementationSpecific
-  tls: []
-  #  - secretName: chart-example-tls
-  #    hosts:
-  #      - chart-example.local
+  tls:
+  - secretName: chart-example-tls
+    hosts:
+      - chart-example.local
 
+## Resource limits & requests
+##
 resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious
   # choice for the user. This also increases chances charts run on environments with little
@@ -73,6 +167,77 @@ resources: {}
   #   cpu: 100m
   #   memory: 128Mi
 
+## Define which Nodes the Pods are scheduled on.
+##
+nodeSelector: {}
+
+## Tolerations for use with node taints
+##
+tolerations: []
+
+## Assign custom affinity rules
+##
+affinity: {}
+
+## Controller Container liveness/readiness probe configuration
+## ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+##
+livenessProbe: {}
+  # failureThreshold: 3
+  # successThreshold: 1
+  # initialDelaySeconds: 0
+  # timeoutSeconds: 1
+  # tcpSocket:
+  #   port: 80
+  # periodSeconds: 10
+
+readinessProbe: {}
+  # failureThreshold: 3
+  # successThreshold: 1
+  # initialDelaySeconds: 0
+  # timeoutSeconds: 1
+  # tcpSocket:
+  #   port: 80
+  # periodSeconds: 10
+
+startupProbe: {}
+  # failureThreshold: 3
+  # successThreshold: 1
+  # initialDelaySeconds: 0
+  # timeoutSeconds: 1
+  # tcpSocket:
+  #   port: 80
+  # periodSeconds: 10
+
+## Annotations to add to the pod of statefulset
+##
+stateful:
+  annotations: {}
+
+## If enabled, creates a PVC and deploy the pod as statefulset
+##
+persistence:
+  enabled: false
+  accessModes:
+  - ReadWriteOnce
+  size: 50Gi
+  annotations: {}
+  # selector:
+  #   matchLabels:
+  #     app.kubernetes.io/name: common
+  # subPath: ""
+  # existingClaim:
+  # storageClassName:
+
+## See `kubectl explain poddisruptionbudget.spec` for more
+## ref: https://kubernetes.io/docs/tasks/run-application/configure-pdb/
+podDisruptionBudget: {}
+  # minAvailable: 1
+  # maxUnavailable: 1
+
+## Autoscaling should be enabled for statefulsets
+## ref: https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/
+##
 autoscaling:
   enabled: false
   minReplicas: 1
@@ -80,8 +245,38 @@ autoscaling:
   targetCPUUtilizationPercentage: 80
   # targetMemoryUtilizationPercentage: 80
 
-nodeSelector: {}
+## If enabled, create service monitor of Prometheus-Operator
+## ref: https://github.com/prometheus-operator/prometheus-operator/blob/main/Documentation/user-guides/getting-started.md#include-servicemonitors
+##
+serviceMonitor:
+  enabled: false
+  annotations: {}
 
-tolerations: []
+  ## List of endpoints of service which Prometheus scrapes
+  ##
+  endpoints:
+  - path: /metrics
+    port: http
+    interval: 1m
+    scheme: http
+    scrapeTimeout: 30s
+    honorLabels: true
 
-affinity: {}
+  ## Propagate certain service labels to Prometheus.
+  targetLabels: []
+
+# Extra volumes to be added in addition to those specified under `defaultVolumes`.
+extraVolumes: []
+
+# Extra volume mounts together. Corresponds to `extraVolumes`.
+extraVolumeMounts: []
+
+## If enabled, create cloudsql proxy resources
+##
+cloudsql:
+  enabled: false
+  service:
+    port: 5432
+    targetPort: 5432
+  commandline:
+    args: "-instances=gcp-project-id:zone:instance-name=tcp:0.0.0.0:5432"
