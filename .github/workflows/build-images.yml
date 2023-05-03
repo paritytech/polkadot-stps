@@ -1,0 +1,98 @@
+name: Build and Publish containers for new releases
+
+on:
+  release:
+    types:
+      - published
+
+jobs:
+  funder:
+    name:                         Build and push funder image
+    runs-on:                      ubuntu-latest
+    steps:
+    - uses:                       actions/checkout@v3
+    - name:                       Build Image
+      uses:                       redhat-actions/buildah-build@v2
+      with:
+        image:                    stps-funder
+        tags:                     ${{ github.event.release.tag_name }} latest
+        dockerfiles: |
+          ./utils/dockerfiles/Dockerfile.funder
+        build-args: |
+          VERSION=${{ github.event.release.tag_name }}
+          VCS_REF=${{ github.ref }}
+          BUILD_DATE=${{ github.event.release.published_at }}
+
+    - name:                       Push image to docker.io
+      id:                         push-to-dockerhub
+      uses:                       redhat-actions/push-to-registry@v2
+      with:
+        registry:                 docker.io/paritytech
+        image:                    stps-funder
+        tags:                     ${{ github.event.release.tag_name }} latest
+        username:                 ${{ secrets.DOCKERHUB_USERNAME }}
+        password:                 ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name:                       Check the image
+      run: |
+        echo "New image has been pushed to ${{ steps.push-to-dockerhub.outputs.registry-path }}"
+  sender:
+    name:                         Build and push sender image
+    runs-on:                      ubuntu-latest
+    steps:
+    - uses:                       actions/checkout@v3
+    - name:                       Build Image
+      uses:                       redhat-actions/buildah-build@v2
+      with:
+        image:                    stps-sender
+        tags:                     ${{ github.event.release.tag_name }} latest
+        dockerfiles: |
+          ./utils/dockerfiles/Dockerfile.sender
+        build-args: |
+          VERSION=${{ github.event.release.tag_name }}
+          VCS_REF=${{ github.ref }}
+          BUILD_DATE=${{ github.event.release.published_at }}
+
+    - name:                       Push image to docker.io
+      id:                         push-to-dockerhub
+      uses:                       redhat-actions/push-to-registry@v2
+      with:
+        registry:                 docker.io/paritytech
+        image:                    stps-sender
+        tags:                     ${{ github.event.release.tag_name }} latest
+        username:                 ${{ secrets.DOCKERHUB_USERNAME }}
+        password:                 ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name:                       Check the image
+      run: |
+        echo "New image has been pushed to ${{ steps.push-to-dockerhub.outputs.registry-path }}"
+  tps:
+    name:                         Build and push tps image
+    runs-on:                      ubuntu-latest
+    steps:
+    - uses:                       actions/checkout@v3
+    - name:                       Build Image
+      uses:                       redhat-actions/buildah-build@v2
+      with:
+        image:                    stps-tps
+        tags:                     ${{ github.event.release.tag_name }} latest
+        dockerfiles: |
+          ./utils/dockerfiles/Dockerfile.tps
+        build-args: |
+          VERSION=${{ github.event.release.tag_name }}
+          VCS_REF=${{ github.ref }}
+          BUILD_DATE=${{ github.event.release.published_at }}
+
+    - name:                       Push image to docker.io
+      id:                         push-to-dockerhub
+      uses:                       redhat-actions/push-to-registry@v2
+      with:
+        registry:                 docker.io/paritytech
+        image:                    stps-tps
+        tags:                     ${{ github.event.release.tag_name }} latest
+        username:                 ${{ secrets.DOCKERHUB_USERNAME }}
+        password:                 ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name:                       Check the image
+      run: |
+        echo "New image has been pushed to ${{ steps.push-to-dockerhub.outputs.registry-path }}"
