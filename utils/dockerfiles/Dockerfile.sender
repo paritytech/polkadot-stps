@@ -4,9 +4,9 @@ COPY . /build
 
 WORKDIR /build/utils/sender
 
-ARG feature_flag
+ARG CHAIN
 
-ENV FEATURE=${feature_flag}
+ENV FEATURE=${CHAIN}
 
 RUN cargo build --features=$FEATURE --release
 
