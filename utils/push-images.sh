@@ -4,11 +4,19 @@
 # which is port-forwarded locally on port 5000, or alternatively, a registry running in a container
 # with the same port exposede.
 
-docker tag stps-tps localhost:5000/stps-tps:latest
-docker push localhost:5000/stps-tps:latest
+if [ -z "$1" ]
+    then
+        echo 'No argument supplied. Must pass either "rococo", or "tick".'
+        exit 1
+fi
 
-docker tag stps-sender localhost:5000/stps-sender:latest
-docker push localhost:5000/stps-sender:latest
+FEATURE=$1
 
-docker tag stps-funder localhost:5000/stps-funder:latest
-docker push localhost:5000/stps-funder:latest
+docker tag stps-tps-$FEATURE localhost:5000/stps-tps-$FEATURE:latest
+docker push localhost:5000/stps-tps-$FEATURE:latest
+
+docker tag stps-sender-$FEATURE localhost:5000/stps-sender-$FEATURE:latest
+docker push localhost:5000/stps-sender-$FEATURE:latest
+
+docker tag stps-funder-$FEATURE localhost:5000/stps-funder-$FEATURE:latest
+docker push localhost:5000/stps-funder-$FEATURE:latest
