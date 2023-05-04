@@ -9,10 +9,10 @@ fi
 FEATURE=$1
 
 # Build tps image
-docker build -f dockerfiles/Dockerfile.tps --build-arg CHAIN=$FEATURE -t stps-tps-$FEATURE:latest .
+docker build -f utils/dockerfiles/Dockerfile.tps --build-arg CHAIN=$FEATURE -t stps-tps-$FEATURE:latest .
 
 # Build sender image
-docker build -f dockerfiles/Dockerfile.sender --build-arg CHAIN=$FEATURE -t stps-sender-$FEATURE:latest .
+docker build -f utils/dockerfiles/Dockerfile.sender --build-arg CHAIN=$FEATURE -t stps-sender-$FEATURE:latest .
 
 # Build funder image
-docker build -f dockerfiles/Dockerfile.funder --build-arg CHAIN=$FEATURE -t stps-funder-$FEATURE:latest .
+docker build -f utils/dockerfiles/Dockerfile.funder --build-arg CHAIN=$FEATURE -t stps-funder-$FEATURE:latest .
