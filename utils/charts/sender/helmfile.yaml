@@ -1,6 +1,6 @@
 repositories:
   - name: chartmuseum
-    url: http://localhost:8080/chartmuseum
+    url: http://localhost:8080
 
 releases:
   - name: stps-sender
