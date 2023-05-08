@@ -11,4 +11,4 @@ collator01: run ./set_sender_index.sh with "0" within 1 seconds
 collator01: run ./sender.sh with "9944,1,16384" within 200 seconds
 
 # Calculate TPS.
-alice: js-script ../utils.js with "calculate_tps,1,16384" return is 0 within 600 secs
+alice: js-script ../utils.js with "calculate_tps,1,16384,tick" return is 0 within 600 secs

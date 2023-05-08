@@ -5,6 +5,7 @@ async function run(nodeName, networkInfo, jsArgs) {
     const cmd = jsArgs[0];
     const totalSenders = jsArgs[1];
     const totalTx = jsArgs[2];
+    const relayOrPara = jsArgs[3]; // rococo or tick, used for compilation features
     let senderIndex = nodeName.split("-")[1];
 
     return new Promise((resolve, _reject) => {
@@ -12,14 +13,14 @@ async function run(nodeName, networkInfo, jsArgs) {
         switch(cmd) {
             case "send_balance_transfers":
                 if (senderIndex) {
-                    cargoArgs = ['r', '--quiet', '--release', '--manifest-path', 'utils/sender/Cargo.toml', '--', '--node-url', wsUri, '--sender-index', senderIndex, '--total-senders', totalSenders, '--num', totalTx];
+                    cargoArgs = ['r', '--quiet', '--release', '--manifest-path', 'utils/sender/Cargo.toml', '--features', relayOrPara, '--', '--node-url', wsUri, '--sender-index', senderIndex, '--total-senders', totalSenders, '--num', totalTx];
                 } else {
-                    cargoArgs = ['r', '--quiet', '--release', '--manifest-path', 'utils/sender/Cargo.toml', '--', '--node-url', wsUri, '--sender-index', 0, '--total-senders', totalSenders, '--num', totalTx];
+                    cargoArgs = ['r', '--quiet', '--release', '--manifest-path', 'utils/sender/Cargo.toml', '--features', relayOrPara, '--', '--node-url', wsUri, '--sender-index', 0, '--total-senders', totalSenders, '--num', totalTx];
                 }
 
                 break;
             case "calculate_tps":
-                cargoArgs = ['r', '--quiet', '--release', '--manifest-path', 'utils/tps/Cargo.toml', '--', '--node-url', wsUri, '--num', totalTx, '--total-senders', totalSenders];
+                cargoArgs = ['r', '--quiet', '--release', '--manifest-path', 'utils/tps/Cargo.toml', '--features', relayOrPara, '--', '--node-url', wsUri, '--num', totalTx, '--total-senders', totalSenders];
                 break;
             default:
                 throw new Error();
