@@ -2,8 +2,12 @@ use log::{error, info, warn};
 use std::time::Duration;
 use subxt::{OnlineClient, PolkadotConfig};
 
-/// The runtime used by all other crates.
-#[subxt::subxt(runtime_metadata_path = "metadata.scale")]
+#[cfg(feature = "tick")]
+#[subxt::subxt(runtime_metadata_path = "tick-meta.scale")]
+pub mod runtime {}
+
+#[cfg(feature = "rococo")]
+#[subxt::subxt(runtime_metadata_path = "rococo-meta.scale")]
 pub mod runtime {}
 
 /// Api of the runtime.

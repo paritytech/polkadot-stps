@@ -14,3 +14,7 @@ tokio = { version = "1.18.0", features = ["rt-multi-thread", "macros", "time"] }
 
 [[bin]]
 name = "tps"
+
+[features]
+tick = ["utils/tick"]
+rococo = ["utils/rococo"]

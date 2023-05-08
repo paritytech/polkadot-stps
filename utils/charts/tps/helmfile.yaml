@@ -1,0 +1,10 @@
+repositories:
+  - name: chartmuseum
+    url: http://localhost:8080
+
+releases:
+  - name: stps-tps-scraper
+    namespace: rococo
+    chart: chartmuseum/stps-tps-scraper
+    values:
+      - ./values.yaml

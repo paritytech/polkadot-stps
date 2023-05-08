@@ -1,0 +1,46 @@
+{
+  "settings": {
+    "timeout": 1000
+  },
+  "relaychain": {
+    "chain": "rococo-local",
+    "default_command": "polkadot",
+    "nodes": [
+      {
+        "name": "alice",
+        "extra_args": [
+          "--alice"
+        ]
+      },
+      {
+        "name": "bob",
+        "extra_args": [
+          "--bob"
+        ]
+      }
+    ]
+  },
+  "parachains": [
+    {
+      "genesis": {
+        "runtime": {
+          "runtime_genesis_config": {
+            "balances": {
+              "balances": {% include "../funded-accounts.json" %}
+            }
+          }
+        }
+      },
+      "id": 1000,
+      "cumulus_based": true,
+      "collator": {
+        "name": "collator01",
+        "ws_port": "9999",
+        "command": "polkadot-parachain",
+        "args": [
+          "-lparachain=debug"
+        ]
+      }
+    }
+  ]
+}

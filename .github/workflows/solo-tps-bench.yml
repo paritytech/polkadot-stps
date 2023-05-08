@@ -26,4 +26,4 @@ jobs:
       # zombienet
       - name: Run zombienet
         run: |
-          ./polkadot-stps.sh test_native tests/relay-single-node-native.zndsl
+          ./polkadot-stps.sh test_native tests/native/relay-single-node-native.zndsl

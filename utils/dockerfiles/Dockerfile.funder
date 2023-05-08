@@ -1,0 +1,21 @@
+FROM rust:latest as builder
+
+COPY . /build
+
+WORKDIR /build/utils/funder
+
+ARG CHAIN
+
+ENV FEATURE=${CHAIN}
+
+RUN cargo build --features=$FEATURE --release
+
+FROM docker.io/library/ubuntu:20.04
+
+COPY --from=builder /build/utils/funder/target/release/funder /usr/local/bin
+
+RUN useradd -m -u 1000 -U -s /bin/sh -d /funder funder
+
+USER funder
+
+ENTRYPOINT [ "/usr/local/bin/funder" ]

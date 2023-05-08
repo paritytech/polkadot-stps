@@ -34,8 +34,8 @@ struct Args {
 	chunk_size: usize,
 
 	/// Total number of pre-funded accounts (on funded-accounts.json).
-	#[arg(short)]
-	n: usize,
+	#[arg(long)]
+	num: usize,
 }
 
 async fn send_funds(
@@ -134,7 +134,7 @@ async fn main() -> Result<(), Error> {
 	let args = Args::parse();
 
 	let api = connect(&args.node_url).await?;
-	let n_tx_sender = args.n / args.total_senders;
+	let n_tx_sender = args.num / args.total_senders;
 
 	pre_conditions(&api, args.sender_index, n_tx_sender).await?;
 

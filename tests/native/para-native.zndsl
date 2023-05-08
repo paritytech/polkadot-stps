@@ -1,0 +1,14 @@
+Network: ./para-native.json
+Creds: config
+
+alice: is up within 600 secs
+bob: is up within 600 secs
+
+# Setting sender indexes
+collator01: run ./set_sender_index.sh with "0" within 1 seconds
+
+# Sending the extrinsics
+collator01: run ./sender.sh with "9999,1,16384,para" within 200 seconds
+
+# Calculate TPS.
+collator01: js-script ../utils.js with "calculate_tps,1,16384" return is 0 within 600 secs
