@@ -17,9 +17,13 @@ use tokio::sync::mpsc::{channel, Receiver, Sender};
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
+	/// Node URL
+	#[arg(long)]
+	node_url: Option<String>,
+
 	/// Relay node URL
 	#[arg(long)]
-	relay_url: String,
+	validator_url: Option<String>,
 
 	/// Collator node URL
 	#[arg(long)]
@@ -45,8 +49,9 @@ struct Args {
 	para_finality: bool,
 
 	/// Default parablock time set to 12s for sync-backing.
-	#[arg(short, long, default_value_t = 12.0)]
-	default_parablock_time: f32
+	/// This should be set to 6.0s for async-backing.
+	#[arg(short, long, default_value_t = 12)]
+	default_parablock_time: u64
 }
 
 async fn count_transfers(
@@ -239,8 +244,14 @@ async fn main() -> Result<(), Error> {
 		true => {
 			// Don't need to process many messages concurrently as throughput depends on parablock times
 			let (tx, mut rx) = channel::<H256>(10);
-			let validator_url = args.validator_url;
-			let collator_url = args.collator_url;
+			let validator_url = match args.validator_url {
+				Some(s) => s,
+				None => panic!("Must pass --validator-url when setting --para-finality to 'true'")
+			};
+			let collator_url = match args.collator_url {
+				Some(s) => s,
+				None => panic!("Must pass --collator-url when setting --para-finality to 'true'")
+			};
 			let relay_api = connect(&validator_url).await?;
 			let para_api = connect(&collator_url).await?;
 
@@ -249,13 +260,17 @@ async fn main() -> Result<(), Error> {
 				subscribe(&relay_api, tx).await;
 			});
 
-			info!("Counting Transfer events from main thread");
+			info!("Counting Transfer events from async main thread");
 			count_transfers(&para_api, rx, args.default_parablock_time).await?;
 		},
 		
 		false => {
+			let node_url = match args.node_url {
+				Some(s) => s,
+				None => panic!("Must pass --node-url when setting --para-finality to 'false'")
+			};
 			let n_tx_truncated = (args.num / args.total_senders) * args.total_senders;
-			let api = connect(&args.node_url).await?;
+			let api = connect(&node_url).await?;
 			calc_tps(&api, n_tx_truncated, args.genesis).await?;
 		}
 	}
