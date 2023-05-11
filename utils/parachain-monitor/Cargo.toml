@@ -1,0 +1,21 @@
+[package]
+name = "parachain-monitor"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+clap = { version = "4.2.7", features = ["derive"] }
+polkadot-primitives = { git = "https://github.com/paritytech/polkadot", branch = "master" }
+env_logger = "0.10.0"
+futures-util = "0.3.28"
+log = "0.4.17"
+subxt = "0.28.0"
+tokio = { version = "1.28.1", features = ["full"] }
+utils = { path = ".." }
+parity-scale-codec = { version = "3.5.0", features = ["derive"] }
+
+[features]
+tick = ["utils/tick"]
+rococo = ["utils/rococo"]
