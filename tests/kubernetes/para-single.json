@@ -37,6 +37,7 @@
       "cumulus_based": true,
       "collator": {
         "name": "collator01",
+        "ws_port": "9944",
         "image": "parity/polkadot-collator",
         "command": "polkadot-collator",
         "args": [

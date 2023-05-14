@@ -2,8 +2,8 @@
 
 set -e
 
-POLKADOT_V=v0.9.33
-ZOMBIENET_V=v1.3.28
+POLKADOT_V=v0.9.42
+ZOMBIENET_V=v1.3.52
 CLUSTER_ID="gke_parity-zombienet_europe-west3-b_parity-zombienet"
 
 print_help() {
