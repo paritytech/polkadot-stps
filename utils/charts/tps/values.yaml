@@ -21,16 +21,23 @@ extraLabels: {}
 ## Image to use for the chart
 ##
 image:
-  repository: localhost:5000/stps-tps
+  repository: localhost:5000/stps-tps-rococo
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   tag: "latest"
 
 containerArguments:
-  node-url: "localrococo-validator-a-node.rococo.svc.cluster.local:9944"
-  sender-index: "0"
+  #node-url: "localrococo-validator-a-node.rococo.svc.cluster.local:9944"
+  validator-url: "ws://localrococo-validator-a-node.rococo.svc.cluster.local:9944"
+  collator-url: "ws://localrococo-tick-collator-node.rococo.svc.cluster.local:9944"
   total-senders: "1"
   num: "1684"
+
+parablockFinality:
+  enabled: true
+
+scrapeFromGenesis:
+  enabled: false
 
 ## Override default container args
 ##

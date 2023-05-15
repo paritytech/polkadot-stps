@@ -1,4 +1,5 @@
 use clap::Parser;
+use clap::ArgAction::Set;
 use log::*;
 use tokio::time::{sleep, Duration};
 use utils::{connect, runtime, Api, Error};
@@ -38,14 +39,15 @@ struct Args {
 	num: usize,
 
 	/// Whether to subscribe to blocks from genesis or not.
-	#[arg(short, long, default_value_t = false)]
+	/// For zombienet tests, this should be set to true.
+	/// When deploying tps in more long-living networks, set this to false.
+	#[arg(short, long)]
 	genesis: bool,
 
 	/// Whether to monitor relay-chain, or para-chain finality.
-	/// If set to para-chain, will subscribe to CandidateIncluded events and
-	/// Transfer events concurrently with two different clients; one for the relaychain node,
-	/// the other for the collator node.
-	#[arg(short, long, default_value_t = false)]
+	/// If set to true, tps will subscribe to CandidateIncluded events on the relaychain node,
+	/// and scrape Balances Transfer events concurrently with a collator node RPC client.
+	#[arg(short, long)]
 	para_finality: bool,
 
 	/// Default parablock time set to 12s for sync-backing.
