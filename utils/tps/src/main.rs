@@ -56,7 +56,41 @@ struct Args {
 	default_parablock_time: u64
 }
 
-async fn calc_parablock_tps(
+/// in case we're monitoring TPS on a parachain
+/// we spawn a thread to subscribe for CandidateIncluded events coming from the relay chain
+/// so we can signal to the calc_para_tps thread which finalized block to scrape
+async fn subscribe(relay_api: &Api, tx: Sender<H256>) -> Result<(), Error> {
+	// Subscribe to all finalized blocks:
+	let mut blocks_sub = relay_api.blocks().subscribe_finalized().await?;
+	// For each block, check if the CandidateIncluded extrinsic occurs
+	while let Some(block) = blocks_sub.next().await {
+		let block = block?;
+		let body = block.body().await?;
+		for ext in body.extrinsics() {
+			let events = ext.events().await?;
+			for evt in events.iter() {
+				let evt = evt?;
+				let event_name = evt.variant_name();
+				if event_name == "CandidateIncluded" {
+					// If the CandidateIncluded event occurs, we need to get the CandidateDescriptor by decoding bytes
+					let mut values = evt.field_bytes();
+					let candidate_receipt = CandidateReceipt::<Hash>::decode(&mut values)?;
+					let descriptor = candidate_receipt.descriptor();
+					info!(
+						"ParaBlock Subscriber ===> New ParaHead: {:?} for ParaId: {:?}",
+						descriptor.para_head, descriptor.para_id
+					);
+					tx.send(descriptor.para_head).await?;
+				}
+			}
+		}
+	}
+	Ok(())
+}
+
+/// in case we're monitoring TPS on a parachain
+/// calc_para_tps thread listens for which parachain block to scrape
+async fn calc_para_tps(
 	para_api: &Api,
 	mut rx: Receiver<H256>,
 	default_parablock_time: u64,
@@ -120,38 +154,10 @@ async fn calc_parablock_tps(
 	Ok(())
 }
 
-async fn subscribe(relay_api: &Api, tx: Sender<H256>) -> Result<(), Error> {
-	// Subscribe to all finalized blocks:
-	let mut blocks_sub = relay_api.blocks().subscribe_finalized().await?;
-	// For each block, check if the CandidateIncluded extrinsic occurs
-	while let Some(block) = blocks_sub.next().await {
-		let block = block?;
-		let body = block.body().await?;
-		for ext in body.extrinsics() {
-			let events = ext.events().await?;
-			for evt in events.iter() {
-				let evt = evt?;
-				let event_name = evt.variant_name();
-				if event_name == "CandidateIncluded" {
-					// If the CandidateIncluded event occurs, we need to get the CandidateDescriptor by decoding bytes
-					let mut values = evt.field_bytes();
-					let candidate_receipt = CandidateReceipt::<Hash>::decode(&mut values)?;
-					let descriptor = candidate_receipt.descriptor();
-					info!(
-						"ParaBlock Subscriber ===> New ParaHead: {:?} for ParaId: {:?}",
-						descriptor.para_head, descriptor.para_id
-					);
-					tx.send(descriptor.para_head).await?;
-				}
-			}
-		}
-	}
-	Ok(())
-}
-
-/// we loop over blocks and count the number of transfers in each block
+/// in case we're monitoring TPS on relay chain
+/// we simply loop over blocks and count the number of transfers in each block
 /// we take the timestamp difference between block X and block X-1
-pub async fn calc_tps(api: &Api, n: usize, genesis: bool) -> Result<(), Error> {
+pub async fn calc_relay_tps(api: &Api, n: usize, genesis: bool) -> Result<(), Error> {
 	let storage_timestamp_storage_addr = runtime::storage().timestamp().now();
 	// do we start from genesis, or latest finalized block?
 	let (mut block_number_x, mut block_timestamp_x_minus_one) = match genesis {
@@ -263,7 +269,7 @@ async fn main() -> Result<(), Error> {
 			});
 
 			info!("Counting Transfer events from async main thread");
-			calc_parablock_tps(&para_api, rx, args.default_parablock_time).await?;
+			calc_para_tps(&para_api, rx, args.default_parablock_time).await?;
 		},
 		
 		false => {
@@ -273,7 +279,7 @@ async fn main() -> Result<(), Error> {
 			};
 			let n_tx_truncated = (args.num / args.total_senders) * args.total_senders;
 			let api = connect(&node_url).await?;
-			calc_tps(&api, n_tx_truncated, args.genesis).await?;
+			calc_relay_tps(&api, n_tx_truncated, args.genesis).await?;
 		}
 	}
 
