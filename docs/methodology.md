@@ -29,6 +29,11 @@ The Rust crate under [`utils`](https://github.com/paritytech/polkadot-stps/tree/
 - `sender`: Generates one pre-signed transaction per pre-funded account, and submits them in batches (to avoid clogging up the transaction pool).
 - `tps`: After the every pre-funded account has submitted its transaction, this module sweeps every block since genesis while counting how many balance transfer events were emitted in each block, and also calculating the overall average (s)TPS (by checking block timestamps).
 
+### Parablocks
+
+If the `--para-finality` argument is set to `true` when starting `tps`, (s)TPS is calculated for Parablocks rather than on the relaychain side. This is done by spawning two concurrent RPC clients; one for the relaychain node, and one for the collator/parachain node. By monitoring `CandidateIncluded` events on the relay-chain side, it is possible to get the hash of the most recent included Parablock. By sending this hash via an async mpsc channel to the parachain RPC client, it is possible to then use the collator RPC client to scrape `Transfer` events from this client. Hence, passing `--para-finality=true` sets `tps` to a concurrent system leveraging messaging passing, and both parachain and relaychain RPC clients to calculate the average (s)TPS for parachains.
+Note that this assumes that the `Balances` pallet is available both in the relay- and parachain accordingly. See the below section on conditional compilation to understand why.
+
 ### Conditional compilation
 Note that the `utils/src/lib.rs` file contains a `subxt` macro which is responsible for generating the runtime metadata for the different Rust binaries defined in `utils`. More recentlly, the `tick-meta.scale` metadata has been included as an alternative to the `metadata.scale` runtime metadata to also support connecting the `sTPS` binaries to a `polkadot-parachain` (this is usually referred to as the `tick-collator`, hence the metadata name) collator. This means that if you are compiling the binaries, you now have to specify whether to compile for `rococo`, or the `tick` collator by passing feature flags in this way for example:
 ```
