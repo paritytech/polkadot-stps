@@ -153,7 +153,7 @@ pub async fn calc_tps(api: &Api, n: usize, genesis: bool) -> Result<(), Error> {
 	let storage_timestamp_storage_addr = runtime::storage().timestamp().now();
 	// do we start from genesis, or latest finalized block?
 	let (mut block_number_x, mut block_timestamp_x_minus_one) = match genesis {
-		false => {
+		true => {
 			let block_hash_genesis = api
 				.rpc()
 				.block_hash(Some(1u32.into()))
@@ -166,7 +166,7 @@ pub async fn calc_tps(api: &Api, n: usize, genesis: bool) -> Result<(), Error> {
 				.unwrap();
 			(2, block_timestamp_genesis)
 		},
-		true => {
+		false => {
 			let block_hash_x = api.rpc().finalized_head().await?;
 			let block_header_x = api
 				.rpc()
