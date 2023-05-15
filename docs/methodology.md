@@ -34,7 +34,7 @@ Note that the `utils/src/lib.rs` file contains a `subxt` macro which is responsi
 ```
 $ cargo build --features tick --release
 ```
-Note that the `rococo` metadata is used by default.
+Note that the `rococo` metadata is used by default. Also, when considering the `--para-finality` argument, it is necessary to consider that both a parachain and relaychain RPC is created. Therefore, `--para-finality` assumes that the `Balances` pallet is available in both these runtimes accordingly.
 
 ## Shell Script
 The `polkadot-stps.sh` script automates the process of bootstrapping the setup, namely:
