@@ -1,17 +1,14 @@
 use clap::Parser;
-use clap::ArgAction::Set;
 use log::*;
 use tokio::time::{sleep, Duration};
 use utils::{connect, runtime, Api, Error};
 use futures_util::StreamExt;
-use parity_scale_codec::{Decode, Encode};
+use parity_scale_codec::Decode;
 use polkadot_primitives::{
-	v4::{CandidateDescriptor, CandidateReceipt},
+	v4::CandidateReceipt,
 	Hash,
 };
-use subxt::ext::scale_decode::DecodeAsType;
 use subxt::utils::H256;
-use tokio::sync::mpsc;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 /// util program to count TPS
@@ -133,7 +130,7 @@ async fn calc_para_tps(
 			},
 		};
 		for extrinsic in parabody.extrinsics() {
-			for events in extrinsic.events().await {
+			while let Ok(events) = extrinsic.events().await {
 				for event in events.iter() {
 					let evt = event?;
 					let variant = evt.variant_name();
@@ -251,7 +248,7 @@ async fn main() -> Result<(), Error> {
 	match para_finality {
 		true => {
 			// Don't need to process many messages concurrently as throughput depends on parablock times
-			let (tx, mut rx) = channel::<H256>(10);
+			let (tx, rx) = channel::<H256>(10);
 			let validator_url = match args.validator_url {
 				Some(s) => s,
 				None => panic!("Must pass --validator-url when setting --para-finality to 'true'")
