@@ -54,7 +54,7 @@ struct Args {
 	default_parablock_time: u64
 }
 
-async fn count_transfers(
+async fn calc_parablock_tps(
 	para_api: &Api,
 	mut rx: Receiver<H256>,
 	default_parablock_time: u64,
@@ -261,7 +261,7 @@ async fn main() -> Result<(), Error> {
 			});
 
 			info!("Counting Transfer events from async main thread");
-			count_transfers(&para_api, rx, args.default_parablock_time).await?;
+			calc_parablock_tps(&para_api, rx, args.default_parablock_time).await?;
 		},
 		
 		false => {
