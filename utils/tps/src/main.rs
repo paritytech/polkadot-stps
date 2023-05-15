@@ -40,7 +40,7 @@ struct Args {
 
 	/// Whether to subscribe to blocks from genesis or not.
 	/// For zombienet tests, this should be set to true.
-	/// When deploying tps in more long-living networks, set this to false.
+	/// When deploying tps in more long-living networks, set this to false (or simply omit it).
 	#[arg(short, long)]
 	genesis: bool,
 
