@@ -11,6 +11,9 @@ use polkadot_primitives::{
 use subxt::utils::H256;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
+mod prometheus;
+use crate::prometheus::*;
+
 /// util program to count TPS
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -50,7 +53,20 @@ struct Args {
 	/// Default parablock time set to 12s for sync-backing.
 	/// This should be set to 6.0s for async-backing.
 	#[arg(short, long, default_value_t = 12)]
-	default_parablock_time: u64
+	default_parablock_time: u64,
+
+	/// Whether to export metrics to prometheus
+	#[arg(long)]
+	prometheus: bool,
+
+	/// Prometheus Listener URL
+	#[arg(long, default_value = "0.0.0.0" )]
+	prometheus_url: String,
+
+	/// Prometheus Listener Port
+	#[arg(long, default_value_t = 65432)]
+	prometheus_port: u16,
+
 }
 
 /// in case we're monitoring TPS on a parachain
@@ -91,6 +107,7 @@ async fn calc_para_tps(
 	para_api: &Api,
 	mut rx: Receiver<H256>,
 	default_parablock_time: u64,
+	prometheus_metrics: Option<StpsMetrics>
 ) -> Result<(), Error> {
 	let storage_timestamp_storage_addr = runtime::storage().timestamp().now();
 	let mut trx_in_parablock = 0;
@@ -146,6 +163,11 @@ async fn calc_para_tps(
 			trx_in_parablock / parablock_time,
 			para_head
 		);
+
+		// send metrics to prometheus, if enabled
+		if let Some(metrics) = &prometheus_metrics {
+			metrics.set(trx_in_parablock, parablock_time);
+		}
 	}
 	trx_in_parablock = 0;
 	Ok(())
@@ -154,7 +176,7 @@ async fn calc_para_tps(
 /// in case we're monitoring TPS on relay chain
 /// we simply loop over blocks and count the number of transfers in each block
 /// we take the timestamp difference between block X and block X-1
-pub async fn calc_relay_tps(api: &Api, n: usize, genesis: bool) -> Result<(), Error> {
+pub async fn calc_relay_tps(api: &Api, n: usize, genesis: bool, prometheus_metrics: Option<StpsMetrics>) -> Result<(), Error> {
 	let storage_timestamp_storage_addr = runtime::storage().timestamp().now();
 	// do we start from genesis, or latest finalized block?
 	let (mut block_number_x, mut block_timestamp_x_minus_one) = match genesis {
@@ -225,6 +247,11 @@ pub async fn calc_relay_tps(api: &Api, n: usize, genesis: bool) -> Result<(), Er
 			info!("TPS on block {}: {}", block_number_x, tps);
 		}
 
+		// send metrics to prometheus, if enabled
+		if let Some(metrics) = &prometheus_metrics {
+			metrics.set(tps_count, time_diff);
+		}
+
 		block_number_x += 1;
 		if total_count >= n {
 			let avg_tps: f32 = tps_vec.iter().sum::<f32>() / tps_vec.len() as f32;
@@ -244,6 +271,11 @@ async fn main() -> Result<(), Error> {
 
 	let args = Args::parse();
 	let para_finality = args.para_finality;
+
+	let prometheus_metrics = match args.prometheus {
+		true => Some(run_prometheus_endpoint(&args.prometheus_url, &args.prometheus_port).await?),
+		false => None,
+	};
 
 	match para_finality {
 		true => {
@@ -266,7 +298,7 @@ async fn main() -> Result<(), Error> {
 			});
 
 			info!("Counting Transfer events from async main thread");
-			calc_para_tps(&para_api, rx, args.default_parablock_time).await?;
+			calc_para_tps(&para_api, rx, args.default_parablock_time, prometheus_metrics).await?;
 		},
 		
 		false => {
@@ -276,7 +308,7 @@ async fn main() -> Result<(), Error> {
 			};
 			let n_tx_truncated = (args.num / args.total_senders) * args.total_senders;
 			let api = connect(&node_url).await?;
-			calc_relay_tps(&api, n_tx_truncated, args.genesis).await?;
+			calc_relay_tps(&api, n_tx_truncated, args.genesis, prometheus_metrics).await?;
 		}
 	}
 
