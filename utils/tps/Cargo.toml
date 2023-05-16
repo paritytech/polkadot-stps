@@ -7,10 +7,17 @@ edition = "2021"
 
 [dependencies]
 utils = { path = ".."}
+anyhow = "1.0.71"
 log = "0.4.16"
 env_logger = "0.9.0"
 clap = { version = "4.0.32", features = ["derive"] }
 tokio = { version = "1.18.0", features = ["rt-multi-thread", "macros", "time"] }
+polkadot-primitives = { git = "https://github.com/paritytech/polkadot", branch = "master" }
+futures-util = "0.3.28"
+parity-scale-codec = { version = "3.5.0", features = ["derive"] }
+subxt = "0.28.0"
+prometheus-endpoint = { package = "substrate-prometheus-endpoint", git = "https://github.com/paritytech/substrate", branch = "master" }
+
 
 [[bin]]
 name = "tps"

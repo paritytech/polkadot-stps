@@ -22,15 +22,6 @@
   },
   "parachains": [
     {
-      "genesis": {
-        "runtime": {
-          "runtime_genesis_config": {
-            "balances": {
-              "balances": {% include "../funded-accounts.json" %}
-            }
-          }
-        }
-      },
       "id": 1000,
       "cumulus_based": true,
       "collator": {

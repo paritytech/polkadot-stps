@@ -21,3 +21,9 @@ spec:
         {{- range $key, $val := .Values.containerArguments }}
           - --{{ $key }}={{ $val }}
         {{- end }}
+        {{ if eq .Values.scrapeFromGenesis.enabled true}}
+          - --genesis
+        {{ end }}
+        {{ if eq .Values.parablockFinality.enabled true }}
+          - --para-finality
+        {{ end }}

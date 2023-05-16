@@ -20,7 +20,7 @@ async function run(nodeName, networkInfo, jsArgs) {
 
                 break;
             case "calculate_tps":
-                cargoArgs = ['r', '--quiet', '--release', '--manifest-path', 'utils/tps/Cargo.toml', '--features', relayOrPara, '--', '--node-url', wsUri, '--num', totalTx, '--total-senders', totalSenders];
+                cargoArgs = ['r', '--quiet', '--release', '--manifest-path', 'utils/tps/Cargo.toml', '--features', relayOrPara, '--', '--node-url', wsUri, '--num', totalTx, '--total-senders', totalSenders, '--genesis'];
                 break;
             default:
                 throw new Error();

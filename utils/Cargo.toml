@@ -11,7 +11,7 @@ sp-keyring = "7.0.0"
 sp-runtime = "7.0.0"
 sp-core = { version = "7.0.0", default-features = false  }
 tokio = { version = "1.23.1", features = ["rt-multi-thread", "macros", "time"] }
-codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = ["derive", "full", "bit-vec"] }
+parity-scale-codec  = { version = "3.0.0", default-features = false, features = ["derive", "full", "bit-vec"] }
 subxt = "0.25.0"
 log = "0.4.16"
 
