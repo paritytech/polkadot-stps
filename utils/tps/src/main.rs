@@ -130,14 +130,14 @@ async fn calc_para_tps(
 					.fetch(&storage_timestamp_storage_addr, Some(previous_hash))
 					.await?
 					.unwrap();
-				let time_diff = (parablock_timestamp - previous_parablock_timestamp) / 1000;
-				info!("TPS Counter ===> Parablock time estimated at: {:?}", time_diff);
+				let time_diff = parablock_timestamp - previous_parablock_timestamp;
+				info!("TPS Counter ===> Parablock time estimated at: {:?}ms", time_diff);
 				time_diff
 			},
 			// Assume default if unable to get the previous parablock from parablock number
 			None => {
 				warn!(
-					"TPS Counter ===> Assuming default parablock time of: {:?}",
+					"TPS Counter ===> Assuming default parablock time of: {:?}s",
 					default_parablock_time
 				);
 				Duration::as_secs_f64(&Duration::new(default_parablock_time, 0)) as u64
@@ -153,10 +153,11 @@ async fn calc_para_tps(
 				}
 			}
 		}
+		let tps = trx_in_parablock as f32 / (parablock_time as f32 / 1000.0);
 		// Print to stdout
 		info!(
 			"TPS Counter ===> Counted {} TPS in ParaHead: {:?}",
-			trx_in_parablock / parablock_time,
+			tps,
 			para_head
 		);
 
@@ -301,9 +302,11 @@ async fn main() -> Result<(), Error> {
 
 			info!("Spawning new async thread for subscribing to relay chain blocks.");
 			tokio::spawn(async move {
-				subscribe(&relay_api, tx).await;
+				match subscribe(&relay_api, tx).await {
+					Ok(_) => (),
+					Err(error) => panic!("{:?}", error)
+				}
 			});
-
 			info!("Counting Transfer events from async main thread");
 			calc_para_tps(&para_api, rx, args.default_parablock_time, prometheus_metrics).await?;
 		},
