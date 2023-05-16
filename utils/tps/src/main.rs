@@ -157,7 +157,7 @@ async fn calc_para_tps(
 				}
 			}
 		}
-		// Print to stdout and reset counter
+		// Print to stdout
 		info!(
 			"TPS Counter ===> Counted {} TPS in ParaHead: {:?}",
 			trx_in_parablock / parablock_time,
@@ -168,8 +168,11 @@ async fn calc_para_tps(
 		if let Some(metrics) = &prometheus_metrics {
 			metrics.set(trx_in_parablock, parablock_time, parablock_number);
 		}
+
+		// reset counter
+		trx_in_parablock = 0;
 	}
-	trx_in_parablock = 0;
+
 	Ok(())
 }
 
