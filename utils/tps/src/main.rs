@@ -134,10 +134,10 @@ async fn calc_para_tps(
 					.fetch(&storage_timestamp_storage_addr, Some(previous_hash))
 					.await?
 					.unwrap();
-				let time_diff = parablock_timestamp - previous_parablock_timestamp;
+				let time_diff = (parablock_timestamp - previous_parablock_timestamp)/1000;
 				info!("TPS Counter ===> Parablock time estimated at: {:?}", time_diff);
 				time_diff
-			}
+			},
 			// Assume default if unable to get the previous parablock from parablock number
 			None => {
 				warn!(
@@ -148,13 +148,12 @@ async fn calc_para_tps(
 			},
 		};
 		for extrinsic in parabody.extrinsics() {
-			while let Ok(events) = extrinsic.events().await {
-				for event in events.iter() {
-					let evt = event?;
-					let variant = evt.variant_name();
-					if variant == "Transfer" {
-						trx_in_parablock += 1;
-					}
+			let events = extrinsic.events().await?;
+			for event in events.iter() {
+				let evt = event?;
+				let variant = evt.variant_name();
+				if variant == "Transfer" {
+					trx_in_parablock += 1;
 				}
 			}
 		}
