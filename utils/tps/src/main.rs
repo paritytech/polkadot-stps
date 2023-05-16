@@ -166,7 +166,7 @@ async fn calc_para_tps(
 
 		// send metrics to prometheus, if enabled
 		if let Some(metrics) = &prometheus_metrics {
-			metrics.set(trx_in_parablock, parablock_time);
+			metrics.set(trx_in_parablock, parablock_time, parablock_number);
 		}
 	}
 	trx_in_parablock = 0;
@@ -249,7 +249,7 @@ pub async fn calc_relay_tps(api: &Api, n: usize, genesis: bool, prometheus_metri
 
 		// send metrics to prometheus, if enabled
 		if let Some(metrics) = &prometheus_metrics {
-			metrics.set(tps_count, time_diff);
+			metrics.set(tps_count, time_diff, block_number_x);
 		}
 
 		block_number_x += 1;

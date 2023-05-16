@@ -1,17 +1,17 @@
-use prometheus_endpoint::{prometheus::{Gauge, IntGauge, Opts}, Registry};
+use prometheus_endpoint::{prometheus::{GaugeVec, IntGaugeVec, Opts}, Registry};
 use std::net::ToSocketAddrs;
 
 pub struct StpsMetrics {
-    block_tps: Gauge,
-    block_tx_count: IntGauge,
-    block_time: IntGauge,
+    block_tps: GaugeVec,
+    block_tx_count: IntGaugeVec,
+    block_time: IntGaugeVec,
 }
 
 impl StpsMetrics {
-    pub fn set(&self, tx_count: u64, block_time: u64) {
-        self.block_tps.set((tx_count / block_time) as f64);
-        self.block_tx_count.set(tx_count as i64);
-        self.block_time.set(block_time as i64);
+    pub fn set(&self, tx_count: u64, block_time: u64, block_number: u32) {
+        self.block_tps.with_label_values(&[&block_number.to_string()]).set(tx_count as f64 / block_time as f64);
+        self.block_time.with_label_values(&[&block_number.to_string()]).set(block_time as i64);
+        self.block_tx_count.with_label_values(&[&block_number.to_string()]).set(tx_count as i64);
     }
 }
 
@@ -30,25 +30,32 @@ pub async fn run_prometheus_endpoint(prometheus_url: &String, prometheus_port: &
 fn register_metrics(registry: &Registry) -> anyhow::Result<StpsMetrics> {
     Ok(StpsMetrics {
         block_tps: prometheus_endpoint::register(
-           Gauge::with_opts(
+           GaugeVec::new(
                Opts::new(
                    "tps",
                    "Transactions per second in the block",
-               )
+               ),
+               &["block_number"],
            )?,
            &registry
         )?,
         block_tx_count: prometheus_endpoint::register(
-           IntGauge::new(
-               "tx_count",
-               "Number of transactions in the block",
+           IntGaugeVec::new(
+               Opts::new(
+                   "tx_count",
+                   "Number of transactions in the block",
+               ),
+               &["block_number"],
            )?,
            &registry
         )?,
         block_time: prometheus_endpoint::register(
-           IntGauge::new(
-               "block_time",
-               "Block time delta in milliseconds",
+           IntGaugeVec::new(
+               Opts::new(
+                   "block_time",
+                   "Block time delta in milliseconds",
+               ),
+               &["block_number"],
            )?,
            &registry
         )?,
