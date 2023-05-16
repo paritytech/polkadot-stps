@@ -1,15 +1,12 @@
 use clap::Parser;
-use log::*;
-use tokio::time::{sleep, Duration};
-use utils::{connect, runtime, Api, Error};
 use futures_util::StreamExt;
+use log::*;
 use parity_scale_codec::Decode;
-use polkadot_primitives::{
-	v4::CandidateReceipt,
-	Hash,
-};
+use polkadot_primitives::{v4::CandidateReceipt, Hash};
 use subxt::utils::H256;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::time::{sleep, Duration};
+use utils::{connect, runtime, Api, Error};
 
 mod prometheus;
 use crate::prometheus::*;
@@ -60,13 +57,12 @@ struct Args {
 	prometheus: bool,
 
 	/// Prometheus Listener URL
-	#[arg(long, default_value = "0.0.0.0" )]
+	#[arg(long, default_value = "0.0.0.0")]
 	prometheus_url: String,
 
 	/// Prometheus Listener Port
 	#[arg(long, default_value_t = 65432)]
 	prometheus_port: u16,
-
 }
 
 /// in case we're monitoring TPS on a parachain
@@ -107,7 +103,7 @@ async fn calc_para_tps(
 	para_api: &Api,
 	mut rx: Receiver<H256>,
 	default_parablock_time: u64,
-	prometheus_metrics: Option<StpsMetrics>
+	prometheus_metrics: Option<StpsMetrics>,
 ) -> Result<(), Error> {
 	let storage_timestamp_storage_addr = runtime::storage().timestamp().now();
 	let mut trx_in_parablock = 0;
@@ -134,7 +130,7 @@ async fn calc_para_tps(
 					.fetch(&storage_timestamp_storage_addr, Some(previous_hash))
 					.await?
 					.unwrap();
-				let time_diff = (parablock_timestamp - previous_parablock_timestamp)/1000;
+				let time_diff = (parablock_timestamp - previous_parablock_timestamp) / 1000;
 				info!("TPS Counter ===> Parablock time estimated at: {:?}", time_diff);
 				time_diff
 			},
@@ -179,7 +175,12 @@ async fn calc_para_tps(
 /// in case we're monitoring TPS on relay chain
 /// we simply loop over blocks and count the number of transfers in each block
 /// we take the timestamp difference between block X and block X-1
-pub async fn calc_relay_tps(api: &Api, n: usize, genesis: bool, prometheus_metrics: Option<StpsMetrics>) -> Result<(), Error> {
+pub async fn calc_relay_tps(
+	api: &Api,
+	n: usize,
+	genesis: bool,
+	prometheus_metrics: Option<StpsMetrics>,
+) -> Result<(), Error> {
 	let storage_timestamp_storage_addr = runtime::storage().timestamp().now();
 	// do we start from genesis, or latest finalized block?
 	let (mut block_number_x, mut block_timestamp_x_minus_one) = match genesis {
@@ -230,8 +231,11 @@ pub async fn calc_relay_tps(api: &Api, n: usize, genesis: bool, prometheus_metri
 			block_hash_x = api.rpc().block_hash(Some(block_number_x.into())).await?;
 		}
 
-		let block_timestamp_x =
-			api.storage().fetch(&storage_timestamp_storage_addr, block_hash_x).await?.unwrap();
+		let block_timestamp_x = api
+			.storage()
+			.fetch(&storage_timestamp_storage_addr, block_hash_x)
+			.await?
+			.unwrap();
 		let time_diff = block_timestamp_x - block_timestamp_x_minus_one;
 		block_timestamp_x_minus_one = block_timestamp_x;
 
@@ -286,11 +290,11 @@ async fn main() -> Result<(), Error> {
 			let (tx, rx) = channel::<H256>(10);
 			let validator_url = match args.validator_url {
 				Some(s) => s,
-				None => panic!("Must pass --validator-url when setting --para-finality to 'true'")
+				None => panic!("Must pass --validator-url when setting --para-finality to 'true'"),
 			};
 			let collator_url = match args.collator_url {
 				Some(s) => s,
-				None => panic!("Must pass --collator-url when setting --para-finality to 'true'")
+				None => panic!("Must pass --collator-url when setting --para-finality to 'true'"),
 			};
 			let relay_api = connect(&validator_url).await?;
 			let para_api = connect(&collator_url).await?;
@@ -303,16 +307,16 @@ async fn main() -> Result<(), Error> {
 			info!("Counting Transfer events from async main thread");
 			calc_para_tps(&para_api, rx, args.default_parablock_time, prometheus_metrics).await?;
 		},
-		
+
 		false => {
 			let node_url = match args.node_url {
 				Some(s) => s,
-				None => panic!("Must pass --node-url when setting --para-finality to 'false'")
+				None => panic!("Must pass --node-url when setting --para-finality to 'false'"),
 			};
 			let n_tx_truncated = (args.num / args.total_senders) * args.total_senders;
 			let api = connect(&node_url).await?;
 			calc_relay_tps(&api, n_tx_truncated, args.genesis, prometheus_metrics).await?;
-		}
+		},
 	}
 
 	Ok(())
