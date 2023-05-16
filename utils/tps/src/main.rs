@@ -146,8 +146,10 @@ async fn calc_para_tps(
 			trx_in_parablock / parablock_time,
 			para_head
 		);
+
+		trx_in_parablock = 0;
 	}
-	trx_in_parablock = 0;
+
 	Ok(())
 }
 
