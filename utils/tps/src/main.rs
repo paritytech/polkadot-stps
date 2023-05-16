@@ -98,6 +98,7 @@ async fn calc_para_tps(
 		info!("TPS Counter ===> Received ParaHead: {:?}", para_head);
 		let parablock = para_api.blocks().at(Some(para_head)).await?;
 		let parabody = parablock.body().await?;
+		let parablock_hash = parablock.hash();
 		let parablock_number = parablock.number();
 		let previous_parablock_number = parablock_number - 1;
 		let maybe_previous_parablock_hash =
@@ -105,21 +106,21 @@ async fn calc_para_tps(
 
 		// Need to handle the case where we cannot get the previous parablock timestamp
 		let parablock_time = match maybe_previous_parablock_hash {
-			Some(hash) => {
+			Some(previous_hash) => {
 				let parablock_timestamp = para_api
 					.storage()
-					.fetch(&storage_timestamp_storage_addr, Some(para_head))
+					.fetch(&storage_timestamp_storage_addr, Some(parablock_hash))
 					.await?
 					.unwrap();
 				let previous_parablock_timestamp = para_api
 					.storage()
-					.fetch(&storage_timestamp_storage_addr, Some(hash))
+					.fetch(&storage_timestamp_storage_addr, Some(previous_hash))
 					.await?
 					.unwrap();
 				let time_diff = parablock_timestamp - previous_parablock_timestamp;
 				info!("TPS Counter ===> Parablock time estimated at: {:?}", time_diff);
 				time_diff
-			},
+			}
 			// Assume default if unable to get the previous parablock from parablock number
 			None => {
 				warn!(
