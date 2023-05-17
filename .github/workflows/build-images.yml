@@ -15,12 +15,11 @@ jobs:
       uses:                       redhat-actions/buildah-build@v2
       with:
         image:                    stps-funder
-        tags:                     ${{ github.event.release.tag_name }} latest
+        tags:                     tick-latest
         dockerfiles: |
           ./utils/dockerfiles/Dockerfile.funder
         build-args: |
           CHAIN="tick"
-          VERSION=${{ github.event.release.tag_name }}
           VCS_REF=${{ github.ref }}
           BUILD_DATE=${{ github.event.release.published_at }}
 
@@ -30,7 +29,7 @@ jobs:
       with:
         registry:                 docker.io/paritytech
         image:                    stps-funder
-        tags:                     ${{ github.event.release.tag_name }} latest
+        tags:                     tick-latest
         username:                 ${{ secrets.DOCKERHUB_USERNAME }}
         password:                 ${{ secrets.DOCKERHUB_TOKEN }}
 
@@ -47,12 +46,11 @@ jobs:
       uses:                       redhat-actions/buildah-build@v2
       with:
         image:                    stps-sender
-        tags:                     ${{ github.event.release.tag_name }} latest
+        tags:                     tick-latest
         dockerfiles: |
           ./utils/dockerfiles/Dockerfile.sender
         build-args: |
           CHAIN="tick"
-          VERSION=${{ github.event.release.tag_name }}
           VCS_REF=${{ github.ref }}
           BUILD_DATE=${{ github.event.release.published_at }}
 
@@ -62,7 +60,7 @@ jobs:
       with:
         registry:                 docker.io/paritytech
         image:                    stps-sender
-        tags:                     ${{ github.event.release.tag_name }} latest
+        tags:                     tick-latest
         username:                 ${{ secrets.DOCKERHUB_USERNAME }}
         password:                 ${{ secrets.DOCKERHUB_TOKEN }}
 
@@ -78,12 +76,11 @@ jobs:
       uses:                       redhat-actions/buildah-build@v2
       with:
         image:                    stps-tps
-        tags:                     ${{ github.event.release.tag_name }} latest
+        tags:                     tick-latest
         dockerfiles: |
           ./utils/dockerfiles/Dockerfile.tps
         build-args: |
           CHAIN="tick"
-          VERSION=${{ github.event.release.tag_name }}
           VCS_REF=${{ github.ref }}
           BUILD_DATE=${{ github.event.release.published_at }}
 
@@ -93,7 +90,7 @@ jobs:
       with:
         registry:                 docker.io/paritytech
         image:                    stps-tps
-        tags:                     ${{ github.event.release.tag_name }} latest
+        tags:                     tick-latest
         username:                 ${{ secrets.DOCKERHUB_USERNAME }}
         password:                 ${{ secrets.DOCKERHUB_TOKEN }}
 
@@ -111,12 +108,11 @@ jobs:
       uses:                       redhat-actions/buildah-build@v2
       with:
         image:                    stps-funder
-        tags:                     ${{ github.event.release.tag_name }} latest
+        tags:                     rococo-latest
         dockerfiles: |
           ./utils/dockerfiles/Dockerfile.funder
         build-args: |
           CHAIN="rococo"
-          VERSION=${{ github.event.release.tag_name }}
           VCS_REF=${{ github.ref }}
           BUILD_DATE=${{ github.event.release.published_at }}
 
@@ -126,7 +122,7 @@ jobs:
       with:
         registry:                 docker.io/paritytech
         image:                    stps-funder
-        tags:                     ${{ github.event.release.tag_name }} latest
+        tags:                     rococo-latest
         username:                 ${{ secrets.DOCKERHUB_USERNAME }}
         password:                 ${{ secrets.DOCKERHUB_TOKEN }}
 
@@ -143,12 +139,11 @@ jobs:
       uses:                       redhat-actions/buildah-build@v2
       with:
         image:                    stps-sender
-        tags:                     ${{ github.event.release.tag_name }} latest
+        tags:                     rococo-latest
         dockerfiles: |
           ./utils/dockerfiles/Dockerfile.sender
         build-args: |
           CHAIN="rococo"
-          VERSION=${{ github.event.release.tag_name }}
           VCS_REF=${{ github.ref }}
           BUILD_DATE=${{ github.event.release.published_at }}
 
@@ -175,12 +170,11 @@ jobs:
       uses:                       redhat-actions/buildah-build@v2
       with:
         image:                    stps-tps
-        tags:                     ${{ github.event.release.tag_name }} latest
+        tags:                     rococo-latest
         dockerfiles: |
           ./utils/dockerfiles/Dockerfile.tps
         build-args: |
           CHAIN="rococo"
-          VERSION=${{ github.event.release.tag_name }}
           VCS_REF=${{ github.ref }}
           BUILD_DATE=${{ github.event.release.published_at }}
 
