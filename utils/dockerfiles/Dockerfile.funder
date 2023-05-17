@@ -5,6 +5,8 @@ COPY . /build
 WORKDIR /build/utils/funder
 
 ARG CHAIN
+ARG VCS_REF
+ARG BUILD_DATE
 
 ENV FEATURE=${CHAIN}
 
@@ -14,7 +16,15 @@ FROM docker.io/library/ubuntu:20.04
 
 COPY --from=builder /build/utils/funder/target/release/funder /usr/local/bin
 
-RUN useradd -m -u 1000 -U -s /bin/sh -d /funder funder
+LABEL description="Docker image for sTPS funder binary" \
+	io.parity.image.authors="mattia@parity.io, devops-team@parity.io" \
+	io.parity.image.vendor="Parity Technologies" \
+	io.parity.image.description="Used to generate a .json with pre-funded Balances pallet accounts to prepare for (s)TPS tests" \
+	io.parity.image.created="${BUILD_DATE}" \
+    io.parity.image.source=https://github.com/paritytech/polkadot-stps/blob/${VCS_REF}/utils/dockerfiles/Dockerfile.funder"
+
+RUN useradd -m -u 1000 -U -s /bin/sh -d /funder funder && \
+    rm -rf /usr/bin /usr/sbin
 
 USER funder
 
