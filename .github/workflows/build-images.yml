@@ -3,7 +3,7 @@ name: Build and Publish containers for new releases
 on:
   release:
     types:
-      - published
+      - created
 
 jobs:
   funder-tick:
