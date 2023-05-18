@@ -1,15 +1,15 @@
 use clap::Parser;
 use futures::future::try_join_all;
 use serde_json::Value;
-use sp_core::{sr25519::Pair as SrPair, Pair};
-use sp_runtime::AccountId32;
+use sp_core::{crypto::Ss58Codec, sr25519::Pair as SrPair, Pair};
+use sp_runtime::{traits::IdentifyAccount, AccountId32};
 use std::{
 	fs::File,
 	io::Read,
 	ops::Range,
 	path::{Path, PathBuf},
 };
-use subxt::{tx::PairSigner, PolkadotConfig};
+
 use utils::{Error, DERIVATION};
 
 const DEFAULT_FUNDED_JSON_PATH: &str = "funded-accounts.json";
@@ -21,6 +21,10 @@ struct Args {
 	/// The number of pre-funded accounts to derive
 	#[arg(short, default_value_t = 500000)]
 	n: usize,
+
+	/// The ss58 prefix to use (https://github.com/paritytech/ss58-registry/blob/main/ss58-registry.json)
+	#[arg(long, short, default_value_t = 42_u16)]
+	ss58_prefix: u16,
 
 	/// Path to write the funded accounts to.
 	#[arg(long, short, default_value = DEFAULT_FUNDED_JSON_PATH)]
@@ -38,16 +42,26 @@ const FUNDS: u64 = 10_000_000_000_000_000;
 ///
 /// * `derivation_blueprint` - An index will be appended to this and used as derivation path.
 /// * `n` - The minimum number of accounts to create. The order of accounts is unspecified.
+/// * `ss58_prefix` - The prefix to use to generate the json file.
 /// * `path` - The path to write the JSON file to.
 /// * `threads` - The number of threads to use for deriving the accounts.
-pub async fn funded_accounts_json(n: usize, path: &Path, threads: usize) -> Result<(), Error> {
-	let accounts = derive_accounts_json(n, threads).await?;
+pub async fn funded_accounts_json(
+	n: usize,
+	ss58_prefix: u16,
+	path: &Path,
+	threads: usize,
+) -> Result<(), Error> {
+	let accounts = derive_accounts_json(n, ss58_prefix, threads).await?;
 
 	let mut file = File::create(path)?;
 	serde_json::to_writer_pretty(&mut file, &accounts).map_err(Into::into)
 }
 
-pub async fn derive_accounts_json(n: usize, threads: usize) -> Result<Value, Error> {
+pub async fn derive_accounts_json(
+	n: usize,
+	ss58_prefix: u16,
+	threads: usize,
+) -> Result<Value, Error> {
 	let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(threads).build()?;
 	// Round n up to the next multiple of threads.
 	let n = (n + threads - 1) / threads * threads;
@@ -70,7 +84,7 @@ pub async fn derive_accounts_json(n: usize, threads: usize) -> Result<Value, Err
 		.iter()
 		.flatten()
 		.flatten()
-		.map(|a| (a.to_string(), FUNDS))
+		.map(|a| (a.to_ss58check_with_version(ss58_prefix.into()), FUNDS))
 		.collect();
 	// Don't just drop a tokio runtime in async context, since that panics.
 	rt.shutdown_background();
@@ -90,8 +104,7 @@ async fn derive_accounts(range: Range<usize>) -> Vec<AccountId32> {
 		.map(|i| {
 			let derivation = format!("{}{}", DERIVATION, i);
 			let pair: SrPair = Pair::from_string(&derivation, None).unwrap();
-			let signer: PairSigner<PolkadotConfig, SrPair> = PairSigner::new(pair);
-			signer.account_id().clone()
+			pair.public().into_account().into()
 		})
 		.collect()
 }
@@ -115,7 +128,7 @@ async fn main() -> Result<(), Error> {
 
 	let args = Args::parse();
 
-	funded_accounts_json(args.n, &args.output, args.threads).await?;
+	funded_accounts_json(args.n, args.ss58_prefix, &args.output, args.threads).await?;
 
 	Ok(())
 }
