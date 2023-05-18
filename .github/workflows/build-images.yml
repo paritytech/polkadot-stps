@@ -1,4 +1,4 @@
-name: Build and Publish containers for new releases
+name: Build and Publish Docker containers
 
 on:
   push:
