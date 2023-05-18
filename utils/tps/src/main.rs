@@ -114,7 +114,7 @@ async fn calc_para_tps(
 		let parablock_hash = parablock.hash();
 		let parablock_number = parablock.number();
 		
-		// Skip the first parablock as no way to calculate time-difference between it and non-existging block
+		// Skip the first parablock as no way to calculate time-difference between it and non-existing block 0
 		if parablock_number == 1 {
 			info!("TPS Counter ===> Received Parablock number: {:?}, skipping accordingly.", parablock_number);
 			continue;
