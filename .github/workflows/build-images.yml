@@ -19,7 +19,7 @@ jobs:
         dockerfiles: |
           ./utils/dockerfiles/Dockerfile.funder
         build-args: |
-          CHAIN="tick"
+          CHAIN=tick
           VCS_REF=${{ github.ref }}
           BUILD_DATE=${{ github.event.release.published_at }}
 
@@ -50,7 +50,7 @@ jobs:
         dockerfiles: |
           ./utils/dockerfiles/Dockerfile.sender
         build-args: |
-          CHAIN="tick"
+          CHAIN=tick
           VCS_REF=${{ github.ref }}
           BUILD_DATE=${{ github.event.release.published_at }}
 
@@ -80,7 +80,7 @@ jobs:
         dockerfiles: |
           ./utils/dockerfiles/Dockerfile.tps
         build-args: |
-          CHAIN="tick"
+          CHAIN=tick
           VCS_REF=${{ github.ref }}
           BUILD_DATE=${{ github.event.release.published_at }}
 
@@ -112,7 +112,7 @@ jobs:
         dockerfiles: |
           ./utils/dockerfiles/Dockerfile.funder
         build-args: |
-          CHAIN="rococo"
+          CHAIN=rococo
           VCS_REF=${{ github.ref }}
           BUILD_DATE=${{ github.event.release.published_at }}
 
@@ -143,7 +143,7 @@ jobs:
         dockerfiles: |
           ./utils/dockerfiles/Dockerfile.sender
         build-args: |
-          CHAIN="rococo"
+          CHAIN=rococo
           VCS_REF=${{ github.ref }}
           BUILD_DATE=${{ github.event.release.published_at }}
 
@@ -174,7 +174,7 @@ jobs:
         dockerfiles: |
           ./utils/dockerfiles/Dockerfile.tps
         build-args: |
-          CHAIN="rococo"
+          CHAIN=rococo
           VCS_REF=${{ github.ref }}
           BUILD_DATE=${{ github.event.release.published_at }}
 
