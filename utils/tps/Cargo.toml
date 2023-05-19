@@ -25,3 +25,5 @@ name = "tps"
 [features]
 tick = ["utils/tick"]
 rococo = ["utils/rococo"]
+versi-tick = ["utils/versi-tick"]
+versi-relay = ["utils/versi-relay"]
