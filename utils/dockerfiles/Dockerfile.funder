@@ -4,11 +4,8 @@ COPY . /build
 
 WORKDIR /build/utils/funder
 
-ARG CHAIN
 ARG VCS_REF
 ARG BUILD_DATE
-
-ENV FEATURE=${CHAIN}
 
 RUN cargo build --release
 
