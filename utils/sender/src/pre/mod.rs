@@ -32,14 +32,10 @@ pub async fn pre_conditions(api: &Api, i: usize, n: usize) -> Result<(), Error> 
 async fn check_account(api: &Api, account: &AccountId32) -> Result<(), Error> {
 	let ext_deposit_addr = runtime::constants().balances().existential_deposit();
 	let ext_deposit = api.constants().at(&ext_deposit_addr)?;
-
-	let genesis = 0u32;
-	let genesis_hash = api.rpc().block_hash(Some(genesis.into())).await?;
-
-	// let account_state = runtime::storage().system().account(account, genesis_hash).await?;
-	let account_state_storage_addr = runtime::storage().system().account(account);
+	let account_state_storage_addr = runtime::storage().system().account(account);	
+	let finalized_head_hash = api.rpc().finalized_head().await?;
 	let account_state =
-		api.storage().fetch(&account_state_storage_addr, genesis_hash).await?.unwrap();
+		api.storage().fetch(&account_state_storage_addr, Some(finalized_head_hash)).await?.unwrap();
 
 	if account_state.nonce != 0 {
 		panic!("Account has non-zero nonce");
@@ -51,6 +47,5 @@ async fn check_account(api: &Api, account: &AccountId32) -> Result<(), Error> {
 		// 10% for fees
 		panic!("Account has insufficient funds");
 	}
-
 	Ok(())
 }

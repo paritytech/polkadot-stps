@@ -132,7 +132,6 @@ async fn main() -> Result<(), Error> {
 	);
 
 	let args = Args::parse();
-
 	let api = connect(&args.node_url).await?;
 	let n_tx_sender = args.num / args.total_senders;
 
