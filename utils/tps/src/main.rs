@@ -2,7 +2,7 @@ use clap::Parser;
 use futures_util::StreamExt;
 use log::*;
 use parity_scale_codec::Decode;
-use polkadot_primitives::{v4::CandidateReceipt, Hash};
+use polkadot_primitives::{v4::CandidateReceipt, Hash, Id};
 use subxt::utils::H256;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::time::{sleep, Duration};
@@ -47,6 +47,11 @@ struct Args {
 	#[arg(short, long)]
 	para_finality: bool,
 
+	/// When para_finality is set, we need to be explicit about which parachain to follow.
+	/// Also, make sure the collator_url is set to a collator on the same parachain accordingly.
+	#[arg(long)]
+	para_id: Option<u32>,
+
 	/// Default parablock time set to 12s for sync-backing.
 	/// This should be set to 6.0s for async-backing.
 	#[arg(short, long, default_value_t = 12)]
@@ -68,7 +73,7 @@ struct Args {
 /// in case we're monitoring TPS on a parachain
 /// we spawn a thread to subscribe for CandidateIncluded events coming from the relay chain
 /// so we can signal to the calc_para_tps thread which finalized block to scrape
-async fn subscribe(relay_api: &Api, tx: Sender<H256>) -> Result<(), Error> {
+async fn subscribe(relay_api: &Api, tx: Sender<H256>, para_id: u32) -> Result<(), Error> {
 	// Subscribe to all finalized blocks:
 	let mut blocks_sub = relay_api.blocks().subscribe_finalized().await?;
 	// For each block, check if the CandidateIncluded extrinsic occurs
@@ -85,11 +90,20 @@ async fn subscribe(relay_api: &Api, tx: Sender<H256>) -> Result<(), Error> {
 					let mut values = evt.field_bytes();
 					let candidate_receipt = CandidateReceipt::<Hash>::decode(&mut values)?;
 					let descriptor = candidate_receipt.descriptor();
-					info!(
-						"ParaBlock Subscriber ===> New ParaHead: {:?} for ParaId: {:?}",
-						descriptor.para_head, descriptor.para_id
-					);
-					tx.send(descriptor.para_head).await?;
+					// Only count TPS for the para_id we are interested in
+					let parablock_para_id = descriptor.para_id;
+					if parablock_para_id.eq(&Id::new(para_id)) {
+						info!(
+							"ParaBlock Subscriber ===> New ParaHead: {:?} for ParaId: {:?}",
+							descriptor.para_head, parablock_para_id
+						);
+						tx.send(descriptor.para_head).await?;
+					} else {
+						debug!(
+							"ParaBlock Subscriber ===> New ParaHead: {:?} for ParaId: {:?} which we are not calculating (s)TPS for",
+							descriptor.para_head, parablock_para_id
+						);
+					}
 				}
 			}
 		}
@@ -286,6 +300,12 @@ async fn main() -> Result<(), Error> {
 
 	let args = Args::parse();
 	let para_finality = args.para_finality;
+	let genesis = args.genesis;
+	
+	// Sanity check for use
+	if para_finality && genesis == true {
+		panic!("Cannot set both --para-finality and --genesis simultaneously!");
+	}
 
 	let prometheus_metrics = match args.prometheus {
 		true => Some(run_prometheus_endpoint(&args.prometheus_url, &args.prometheus_port).await?),
@@ -296,20 +316,28 @@ async fn main() -> Result<(), Error> {
 		true => {
 			// Don't need to process many messages concurrently as throughput depends on parablock times
 			let (tx, rx) = channel::<H256>(10);
+			
 			let validator_url = match args.validator_url {
 				Some(s) => s,
-				None => panic!("Must pass --validator-url when setting --para-finality to 'true'"),
+				None => panic!("Must set --collator-url and --validator-url when enabling --para-finality!"),
 			};
+
 			let collator_url = match args.collator_url {
 				Some(s) => s,
-				None => panic!("Must pass --collator-url when setting --para-finality to 'true'"),
+				None => panic!("Must set --collator-url and --validator-url when enabling --para-finality!"),
 			};
+
+			let para_id = match args.para_id {
+				Some(id) => id,
+				None => panic!("Must set --para-id to specify which parachain to track when enabling --para-finality!")
+			};
+
+			// Create the RPC clients
 			let relay_api = connect(&validator_url).await?;
 			let para_api = connect(&collator_url).await?;
-
-			info!("Spawning new async thread for subscribing to relay chain blocks.");
+			info!("Spawning new async thread for subscribing to relay chain blocks");
 			tokio::spawn(async move {
-				match subscribe(&relay_api, tx).await {
+				match subscribe(&relay_api, tx, para_id).await {
 					Ok(_) => (),
 					Err(error) => panic!("{:?}", error)
 				}
