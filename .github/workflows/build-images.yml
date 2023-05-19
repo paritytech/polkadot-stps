@@ -6,7 +6,7 @@ on:
       - main
 
 jobs:
-  funder-tick:
+  funder:
     name:                         Build and push funder image
     runs-on:                      ubuntu-latest
     steps:
@@ -15,7 +15,7 @@ jobs:
       uses:                       redhat-actions/buildah-build@v2
       with:
         image:                    stps-funder
-        tags:                     tick-latest
+        tags:                     latest
         dockerfiles: |
           ./utils/dockerfiles/Dockerfile.funder
         build-args: |
@@ -121,7 +121,7 @@ jobs:
       with:
         registry:                 docker.io/paritytech
         image:                    stps-sender
-        tags:                     ${{ github.event.release.tag_name }} latest
+        tags:                     rococo-latest
         username:                 ${{ secrets.DOCKERHUB_USERNAME }}
         password:                 ${{ secrets.DOCKERHUB_TOKEN }}
 
@@ -152,7 +152,7 @@ jobs:
       with:
         registry:                 docker.io/paritytech
         image:                    stps-tps
-        tags:                     ${{ github.event.release.tag_name }} latest
+        tags:                     rococo-latest
         username:                 ${{ secrets.DOCKERHUB_USERNAME }}
         password:                 ${{ secrets.DOCKERHUB_TOKEN }}
 
