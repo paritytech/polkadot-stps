@@ -23,8 +23,7 @@ LABEL description="Docker image for sTPS sender binary" \
 	io.parity.image.created="${BUILD_DATE}" \
     io.parity.image.source="https://github.com/paritytech/polkadot-stps/blob/${VCS_REF}/utils/dockerfiles/Dockerfile.sender"
 
-RUN useradd -m -u 1000 -U -s /bin/sh -d /sender sender && \
-    rm -rf /usr/bin /usr/sbin
+RUN useradd -m -u 1000 -U -s /bin/sh -d /sender sender
 
 USER sender
 

@@ -12,7 +12,7 @@ ENV FEATURE=${CHAIN}
 
 RUN cargo build --features=$FEATURE --release
 
-FROM docker.io/library/ubuntu:20.04
+FROM docker.io/library/ubuntu:22.04
 
 COPY --from=builder /build/utils/tps/target/release/tps /usr/local/bin
 
@@ -23,8 +23,7 @@ LABEL description="Docker image for sTPS tps binary" \
 	io.parity.image.created="${BUILD_DATE}" \
     io.parity.image.source="https://github.com/paritytech/polkadot-stps/blob/${VCS_REF}/utils/dockerfiles/Dockerfile.sender"
 
-RUN useradd -m -u 1000 -U -s /bin/sh -d /tps tps && \
-    rm -rf /usr/bin /usr/sbin
+RUN useradd -m -u 1000 -U -s /bin/sh -d /tps tps
 
 USER tps
 
