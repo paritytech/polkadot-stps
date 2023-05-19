@@ -66,6 +66,7 @@ jobs:
     - name:                       Check the image
       run: |
         echo "New image has been pushed to ${{ steps.push-to-dockerhub.outputs.registry-path }}"
+  
   tps-tick:
     name:                         Build and push tps (tick) image
     runs-on:                      ubuntu-latest
@@ -96,7 +97,6 @@ jobs:
     - name:                       Check the image
       run: |
         echo "New image has been pushed to ${{ steps.push-to-dockerhub.outputs.registry-path }}"
-        name: Build and Publish containers for new releases
   
   sender-rococo:
     name:                         Build and push sender (rococo) image
