@@ -1,0 +1,50 @@
+{
+    "settings": {
+      "timeout": 1000
+    },
+    "relaychain": {
+      "chain": "rococo-local",
+      "default_command": "polkadot",
+      "nodes": [
+        {
+          "name": "alice",
+          "extra_args": [
+            "--alice"
+          ]
+        },
+        {
+          "name": "bob",
+          "extra_args": [
+            "--bob"
+          ]
+        }
+      ]
+    },
+    "parachains": [
+      {
+        "id": 1000,
+        "cumulus_based": true,
+        "collator": {
+          "name": "collator1000",
+          "ws_port": "9999",
+          "command": "polkadot-parachain",
+          "args": [
+            "-lparachain=debug"
+          ]
+        }
+      },
+      {
+        "id": 1001,
+        "cumulus_based": true,
+        "collator": {
+          "name": "collator1001",
+          "ws_port": "9998",
+          "command": "polkadot-parachain",
+          "args": [
+            "-lparachain=debug"
+          ]
+        }
+      }
+    ]
+  }
+  
