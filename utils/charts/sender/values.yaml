@@ -21,20 +21,18 @@ extraLabels: {}
 ## Image to use for the chart
 ##
 image:
-  repository: localhost:5000/stps-sender
+  repository: paritytech/stps-sender
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "latest"
+  tag: "rococo-latest"
 
-containerArguments:
+## Override default container args
+##
+args:
   node-url: "localrococo-validator-a-node.rococo.svc.cluster.local:9944"
   sender-index: "0"
   total-senders: "1"
   num: "1684"
-
-## Override default container args
-##
-args: []
 
 ## Number of replicas for the pod
 ##

@@ -18,7 +18,7 @@ spec:
         image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         args:
-        {{- range $key, $val := .Values.containerArguments }}
+        {{- range $key, $val := .Values.args }}
           - --{{ $key }}={{ $val }}
         {{- end }}
         {{ if eq .Values.scrapeFromGenesis.enabled true}}

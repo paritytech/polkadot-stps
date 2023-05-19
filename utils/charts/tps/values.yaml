@@ -21,10 +21,10 @@ extraLabels: {}
 ## Image to use for the chart
 ##
 image:
-  repository: localhost:5000/stps-tps-rococo
+  repository: paritytech/stps-tps
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "latest"
+  tag: "rococo-latest"
 
 containerArguments:
   #node-url: "localrococo-validator-a-node.rococo.svc.cluster.local:9944"

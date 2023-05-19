@@ -1,0 +1,115 @@
+# This is an example for deploying into long-living networks
+# do not use this in practice.
+repositories:
+  - name: parity
+    url: ""
+
+releases:
+  # Assuming the funder can push the funded-accounts.json file somewhere the chainspec can find it
+  - name: stps-funder
+    namespace: versi
+    chart: parity/stps-funder
+    values:
+      image:
+        registry: paritytech/stps-funder
+        tag: latest
+      args:
+        num: 16384
+        storage-url: "http://storage_url"
+
+  # Assuming the pod associated with chainspec can fetch the funded-accounts.json
+  - name: chainspec-override
+    namespace: versi
+    chart: parity/chainspec
+    needs:
+      - stps-funder
+    values:
+      args:
+        funded-accounts-file: "http://*/funded-accounts.json"
+
+  # Release for tracking sTPS on parachains
+  - name: stps-tps-parachains
+    namespace: sTPS
+    chart: parity/stps-tps
+    needs:
+      - chainspec-override
+    values:
+      - paraFinality:
+          enabled: true
+        image:
+          registry: paritytech/stps-tps
+          tag: "tick-latest" 
+        genesis:
+          enabled: false
+        prometheus:
+          enabled: true
+          url: ""
+          port: ""
+        args:
+          collator-url: "ws://collator:ws-port"
+          validator-url: "ws://validator:ws-port"
+          num: 16384
+          total-senders: 5
+          prometheus-url: ""
+          prometheus-port: ""
+
+  # Release for tracking sTPS on relaychain
+  - name: stps-tps-relaychain
+    namespace: sTPS
+    chart: parity/stps-tps
+    needs:
+      - chainspec-override
+    values:
+      - paraFinality:
+          enabled: false
+        image:
+          registry: paritytech/stps-tps
+          tag: "rococo-latest"
+        genesis:
+          enabled: false
+        prometheus:
+          enabled: true
+          url: ""
+          port: ""
+        args:
+          node-url: "ws://validator:ws-port"
+          total-senders: 5
+          num: 16384
+          prometheus-url: ""
+          prometheus-port: ""
+
+  # Release for sending transfers to collator
+  - name: stps-sender-parachain
+    namespace: sTPS
+    chart: parity/stps-sender
+    needs:
+      - stps-tps-parachain
+    values:
+      replicas: 1
+      image:
+        registry: paritytech/stps-sender
+        tag: "tick-latest"
+      args:
+        node-url: "ws://collator:ws-port"
+        sender-index: 0
+        total-senders: 1
+        chunk-size: 50
+        num: 16384 
+
+  # Release for sending transfers to relaychain validator
+  - name: stps-sender-relaychain
+    namespace: sTPS
+    chart: parity/stps-sender
+    needs:
+      - stps-tps-relaychain
+    values:
+      replicas: 1
+      image:
+        registry: paritytech/stps-sender
+        tag: "rococo-latest"
+      args:
+        node-url: "ws://validator:ws-port"
+        sender-index: 0
+        total-senders: 1
+        chunk-size: 50
+        num: 16384 
