@@ -36,10 +36,6 @@ struct Args {
 	/// Total number of pre-funded accounts (on funded-accounts.json).
 	#[arg(long)]
 	num: usize,
-
-	/// Whether to trigger transfers on a parachain, or relaychain.
-	#[arg(long, default_value_t = false)]
-	para_finality: bool,
 }
 
 async fn send_funds(
@@ -136,11 +132,10 @@ async fn main() -> Result<(), Error> {
 	);
 
 	let args = Args::parse();
-	let para_finality = args.para_finality;
 	let api = connect(&args.node_url).await?;
 	let n_tx_sender = args.num / args.total_senders;
 
-	pre_conditions(&api, args.sender_index, n_tx_sender, para_finality).await?;
+	pre_conditions(&api, args.sender_index, n_tx_sender).await?;
 
 	send_funds(&api, args.sender_index, args.chunk_size, n_tx_sender).await?;
 
