@@ -21,7 +21,7 @@ LABEL description="Docker image for sTPS funder binary" \
 	io.parity.image.vendor="Parity Technologies" \
 	io.parity.image.description="Used to generate a .json with pre-funded Balances pallet accounts to prepare for (s)TPS tests" \
 	io.parity.image.created="${BUILD_DATE}" \
-    io.parity.image.source=https://github.com/paritytech/polkadot-stps/blob/${VCS_REF}/utils/dockerfiles/Dockerfile.funder"
+    io.parity.image.source="https://github.com/paritytech/polkadot-stps/blob/${VCS_REF}/utils/dockerfiles/Dockerfile.funder"
 
 RUN useradd -m -u 1000 -U -s /bin/sh -d /funder funder && \
     rm -rf /usr/bin /usr/sbin
