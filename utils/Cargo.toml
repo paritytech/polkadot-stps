@@ -18,3 +18,5 @@ log = "0.4.16"
 [features]
 rococo = []
 tick = []
+versi-tick = []
+versi-relay = []
