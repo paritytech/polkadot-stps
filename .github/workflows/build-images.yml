@@ -98,7 +98,7 @@ jobs:
       run: |
         echo "New image has been pushed to ${{ steps.push-to-dockerhub.outputs.registry-path }}"
 
-    sender-versi-tick:
+  sender-versi-tick:
     name:                         Build and push sender (versi-tick) image
     runs-on:                      ubuntu-latest
     steps:
