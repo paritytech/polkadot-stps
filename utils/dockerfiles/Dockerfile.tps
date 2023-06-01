@@ -1,4 +1,4 @@
-FROM rust:latest as builder
+FROM paritytech/ci-linux:production as builder
 
 COPY . /build
 
@@ -10,7 +10,7 @@ ARG BUILD_DATE
 
 ENV FEATURE=${CHAIN}
 
-RUN cargo build --features=$FEATURE --release
+RUN cargo build --features=$FEATURE --release -vv
 
 FROM docker.io/library/ubuntu:22.04
 
