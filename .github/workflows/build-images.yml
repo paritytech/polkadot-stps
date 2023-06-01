@@ -1,9 +1,10 @@
-name: Build and Publish Docker containers
+name: Test Build Docker containers
 
 on:
   push:
     branches:
       - main
+  pull_request:
 
   workflow_dispatch:
 
