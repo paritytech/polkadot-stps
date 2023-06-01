@@ -10,7 +10,7 @@ ARG BUILD_DATE
 
 ENV FEATURE=${CHAIN}
 
-RUN cargo build --features=$FEATURE --release -vv
+RUN cargo build --features=$FEATURE --release
 
 FROM docker.io/library/ubuntu:22.04
 
