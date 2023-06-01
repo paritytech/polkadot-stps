@@ -24,6 +24,15 @@
       {
         "id": 1000,
         "cumulus_based": true,
+        "genesis": {
+          "runtime": {
+            "runtime_genesis_config": {
+              "balances": {
+                "balances": {% include "../funded-accounts.json" %}
+              }
+            }
+          }
+        },
         "collator": {
           "name": "collator1000",
           "ws_port": "9999",
@@ -36,6 +45,15 @@
       {
         "id": 1001,
         "cumulus_based": true,
+        "genesis": {
+          "runtime": {
+            "runtime_genesis_config": {
+              "balances": {
+                "balances": {% include "../funded-accounts.json" %}
+              }
+            }
+          }
+        },
         "collator": {
           "name": "collator1001",
           "ws_port": "9998",
