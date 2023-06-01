@@ -117,10 +117,13 @@ async fn calc_para_tps(
 	para_api: &Api,
 	mut rx: Receiver<H256>,
 	default_parablock_time: u64,
+	n: usize,
 	prometheus_metrics: Option<StpsMetrics>,
 ) -> Result<(), Error> {
 	let storage_timestamp_storage_addr = runtime::storage().timestamp().now();
 	let mut trx_in_parablock = 0;
+	let mut total_count = 0;
+	let mut tps_vec = Vec::new();
 	while let Some(para_head) = rx.recv().await {
 		info!("TPS Counter ===> Received ParaHead: {:?}", para_head);
 		let parablock = para_api.blocks().at(Some(para_head)).await?;
@@ -174,13 +177,18 @@ async fn calc_para_tps(
 				}
 			}
 		}
-		let tps = trx_in_parablock as f32 / (parablock_time as f32 / 1000.0);
-		// Print to stdout
-		info!(
-			"TPS Counter ===> Counted {} TPS in ParaHead: {:?}",
-			tps,
-			para_head
-		);
+
+		if trx_in_parablock > 0 {
+			let tps = trx_in_parablock as f32 / (parablock_time as f32 / 1000.0);
+			tps_vec.push(tps);
+			info!("TPS Counter ===> TPS on parablock {}: {}", parablock_number, tps);
+		}
+
+		if total_count >= n {
+			let avg_tps: f32 = tps_vec.iter().sum::<f32>() / tps_vec.len() as f32;
+			info!("TPS Counter ===> Got all expected transactions. Average TPS is estimated as: {}", avg_tps);
+			total_count = 0;
+		}
 
 		// send metrics to prometheus, if enabled
 		if let Some(metrics) = &prometheus_metrics {
@@ -343,7 +351,7 @@ async fn main() -> Result<(), Error> {
 				}
 			});
 			info!("Counting Transfer events from async main thread");
-			calc_para_tps(&para_api, rx, args.default_parablock_time, prometheus_metrics).await?;
+			calc_para_tps(&para_api, rx, args.default_parablock_time, args.num, prometheus_metrics).await?;
 		},
 
 		false => {
