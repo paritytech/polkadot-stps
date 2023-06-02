@@ -120,19 +120,18 @@ async fn calc_para_tps(
 	n: usize,
 	prometheus_metrics: Option<StpsMetrics>,
 ) -> Result<(), Error> {
-	
 	let storage_timestamp_storage_addr = runtime::storage().timestamp().now();
 	let mut trx_in_parablock = 0;
 	let mut total_count = 0;
 	let mut tps_vec = Vec::new();
-	
+
 	while let Some(para_head) = rx.recv().await {
 		debug!("Received ParaHead: {:?}", para_head);
 		let parablock = para_api.blocks().at(Some(para_head)).await?;
 		let parabody = parablock.body().await?;
 		let parablock_hash = parablock.hash();
 		let parablock_number = parablock.number();
-		
+
 		// Skip the first parablock as no way to calculate time-difference between it and non-existing block 0
 		if parablock_number == 1 {
 			debug!("Received Parablock number: {:?}, skipping accordingly.", parablock_number);
@@ -313,7 +312,7 @@ async fn main() -> Result<(), Error> {
 	let args = Args::parse();
 	let para_finality = args.para_finality;
 	let genesis = args.genesis;
-	
+
 	// Sanity check for use
 	if para_finality && genesis == true {
 		panic!("Cannot set both --para-finality and --genesis simultaneously!");
@@ -329,15 +328,19 @@ async fn main() -> Result<(), Error> {
 			info!("Starting TPS in parachain mode");
 			// Don't need to process many messages concurrently as throughput depends on parablock times
 			let (tx, rx) = channel::<H256>(10);
-			
+
 			let validator_url = match args.validator_url {
 				Some(s) => s,
-				None => panic!("Must set --collator-url and --validator-url when enabling --para-finality!"),
+				None => panic!(
+					"Must set --collator-url and --validator-url when enabling --para-finality!"
+				),
 			};
 
 			let collator_url = match args.collator_url {
 				Some(s) => s,
-				None => panic!("Must set --collator-url and --validator-url when enabling --para-finality!"),
+				None => panic!(
+					"Must set --collator-url and --validator-url when enabling --para-finality!"
+				),
 			};
 
 			let para_id = match args.para_id {
@@ -352,11 +355,12 @@ async fn main() -> Result<(), Error> {
 			tokio::spawn(async move {
 				match subscribe(&relay_api, tx, para_id).await {
 					Ok(_) => (),
-					Err(error) => panic!("{:?}", error)
+					Err(error) => panic!("{:?}", error),
 				}
 			});
 			debug!("Counting Transfer events frommain thread");
-			calc_para_tps(&para_api, rx, args.default_parablock_time, args.num, prometheus_metrics).await?;
+			calc_para_tps(&para_api, rx, args.default_parablock_time, args.num, prometheus_metrics)
+				.await?;
 		},
 
 		false => {
