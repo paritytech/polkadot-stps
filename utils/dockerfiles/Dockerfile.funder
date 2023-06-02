@@ -1,4 +1,4 @@
-FROM rust:latest as builder
+FROM paritytech/ci-linux:production as builder
 
 COPY . /build
 

@@ -35,6 +35,15 @@
     {
       "id": 1000,
       "cumulus_based": true,
+      "genesis": {
+        "runtime": {
+          "runtime_genesis_config": {
+            "balances": {
+              "balances": {% include "../funded-accounts.json" %}
+            }
+          }
+        }
+      },
       "collator": {
         "name": "collator01",
         "ws_port": "9944",
