@@ -37,7 +37,10 @@ pub async fn connect(url: &str) -> Result<Api, Error> {
 		let promise = OnlineClient::<PolkadotConfig>::from_url(url);
 
 		match promise.await {
-			Ok(client) => return Ok(client),
+			Ok(client) => {
+				info!("Connection established to: {}", url);
+				return Ok(client)
+			},
 			Err(err) => {
 				warn!("API client {} error: {:?}", url, err);
 				tokio::time::sleep(RETRY_DELAY).await;
