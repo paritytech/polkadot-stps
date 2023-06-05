@@ -5,7 +5,7 @@ use parity_scale_codec::Decode;
 use polkadot_primitives::{v4::CandidateReceipt, Hash, Id};
 use subxt::utils::H256;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
-use tokio::time::{sleep, Duration};
+use tokio::time::Duration;
 use utils::{connect, runtime, Api, Error};
 
 mod prometheus;
@@ -80,7 +80,9 @@ async fn subscribe(relay_api: &Api, tx: Sender<H256>, para_id: u32) -> Result<()
 	while let Some(block) = blocks_sub.next().await {
 		let block = block?;
 		let body = block.body().await?;
-		for ext in body.extrinsics() {
+		let extrinsics = body.extrinsics();
+		for ext in extrinsics.iter() {
+			let ext = ext?;
 			let events = ext.events().await?;
 			for evt in events.iter() {
 				let evt = evt?;
@@ -127,7 +129,7 @@ async fn calc_para_tps(
 
 	while let Some(para_head) = rx.recv().await {
 		debug!("Received ParaHead: {:?}", para_head);
-		let parablock = para_api.blocks().at(Some(para_head)).await?;
+		let parablock = para_api.blocks().at(para_head).await?;
 		let parabody = parablock.body().await?;
 		let parablock_hash = parablock.hash();
 		let parablock_number = parablock.number();
@@ -147,12 +149,14 @@ async fn calc_para_tps(
 			Some(previous_hash) => {
 				let parablock_timestamp = para_api
 					.storage()
-					.fetch(&storage_timestamp_storage_addr, Some(parablock_hash))
+					.at(parablock_hash)
+					.fetch(&storage_timestamp_storage_addr)
 					.await?
 					.unwrap();
 				let previous_parablock_timestamp = para_api
 					.storage()
-					.fetch(&storage_timestamp_storage_addr, Some(previous_hash))
+					.at(previous_hash)
+					.fetch(&storage_timestamp_storage_addr)
 					.await?
 					.unwrap();
 				let time_diff = parablock_timestamp - previous_parablock_timestamp;
@@ -169,7 +173,8 @@ async fn calc_para_tps(
 			},
 		};
 
-		for extrinsic in parabody.extrinsics() {
+		for extrinsic in parabody.extrinsics().iter() {
+			let extrinsic = extrinsic?;
 			let events = extrinsic.events().await?;
 			for event in events.iter() {
 				let evt = event?;
@@ -225,7 +230,8 @@ pub async fn calc_relay_tps(
 				.expect("genesis exists, therefore hash exists; qed");
 			let block_timestamp_genesis = api
 				.storage()
-				.fetch(&storage_timestamp_storage_addr, Some(block_hash_genesis))
+				.at(block_hash_genesis)
+				.fetch(&storage_timestamp_storage_addr)
 				.await?
 				.unwrap();
 			(2, block_timestamp_genesis)
@@ -245,7 +251,8 @@ pub async fn calc_relay_tps(
 				.expect("block number exists, therefore hash exists; qed");
 			let block_timestamp_x_minus_one = api
 				.storage()
-				.fetch(&storage_timestamp_storage_addr, Some(block_hash_x_minus_one))
+				.at(block_hash_x_minus_one)
+				.fetch(&storage_timestamp_storage_addr)
 				.await?
 				.unwrap();
 			(block_number_x, block_timestamp_x_minus_one)
@@ -256,17 +263,11 @@ pub async fn calc_relay_tps(
 	let mut tps_vec = Vec::new();
 
 	loop {
-		let mut block_hash_x = api.rpc().block_hash(Some(block_number_x.into())).await?;
-		while block_hash_x.is_none() {
-			info!("waiting for finalization of block {}", block_number_x);
-			sleep(Duration::from_secs(6)).await;
-
-			block_hash_x = api.rpc().block_hash(Some(block_number_x.into())).await?;
-		}
-
+		let block_hash_x = api.rpc().block_hash(Some(block_number_x.into())).await?.expect("block number exists, therefore hash exists; qed");
 		let block_timestamp_x = api
 			.storage()
-			.fetch(&storage_timestamp_storage_addr, block_hash_x)
+			.at(block_hash_x)
+			.fetch(&storage_timestamp_storage_addr)
 			.await?
 			.unwrap();
 		let time_diff = block_timestamp_x - block_timestamp_x_minus_one;
