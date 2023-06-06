@@ -1,7 +1,6 @@
 use log::*;
 use sp_core::{sr25519::Pair as SrPair, Pair};
-use sp_runtime::AccountId32;
-use subxt::{tx::PairSigner, PolkadotConfig};
+use subxt::{tx::PairSigner, utils::AccountId32, PolkadotConfig};
 
 use utils::{runtime, Api, Error, DERIVATION};
 
@@ -36,7 +35,8 @@ async fn check_account(api: &Api, account: &AccountId32) -> Result<(), Error> {
 	let finalized_head_hash = api.rpc().finalized_head().await?;
 	let account_state = api
 		.storage()
-		.fetch(&account_state_storage_addr, Some(finalized_head_hash))
+		.at(finalized_head_hash)
+		.fetch(&account_state_storage_addr)
 		.await?
 		.unwrap();
 
