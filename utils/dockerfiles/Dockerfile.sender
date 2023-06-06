@@ -12,7 +12,7 @@ ENV FEATURE=${CHAIN}
 
 RUN cargo build --features=$FEATURE --release
 
-FROM docker.io/library/ubuntu:20.04
+FROM docker.io/library/ubuntu:22.04
 
 COPY --from=builder /build/utils/sender/target/release/sender /usr/local/bin
 
