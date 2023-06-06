@@ -4,7 +4,8 @@ use futures::future::try_join_all;
 use log::*;
 use sp_core::{sr25519::Pair as SrPair, Pair};
 use subxt::{
-	tx::{BaseExtrinsicParamsBuilder as Params, Era, PairSigner},
+	config::extrinsic_params::{BaseExtrinsicParamsBuilder as Params, Era},
+	tx::PairSigner,
 	PolkadotConfig,
 };
 use utils::{connect, runtime, Api, Error, DERIVATION};
