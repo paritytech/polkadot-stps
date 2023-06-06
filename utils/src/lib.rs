@@ -39,7 +39,7 @@ pub async fn connect(url: &str) -> Result<Api, Error> {
 		match promise.await {
 			Ok(client) => {
 				info!("Connection established to: {}", url);
-				return Ok(client)
+				return Ok(client);
 			},
 			Err(err) => {
 				warn!("API client {} error: {:?}", url, err);

@@ -263,7 +263,11 @@ pub async fn calc_relay_tps(
 	let mut tps_vec = Vec::new();
 
 	loop {
-		let block_hash_x = api.rpc().block_hash(Some(block_number_x.into())).await?.expect("block number exists, therefore hash exists; qed");
+		let block_hash_x = api
+			.rpc()
+			.block_hash(Some(block_number_x.into()))
+			.await?
+			.expect("block number exists, therefore hash exists; qed");
 		let block_timestamp_x = api
 			.storage()
 			.at(block_hash_x)
