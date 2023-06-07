@@ -37,10 +37,8 @@
       "cumulus_based": true,
       "genesis": {
         "runtime": {
-          "runtime_genesis_config": {
-            "balances": {
-              "balances": {% include "../funded-accounts.json" %}
-            }
+          "balances": {
+            "balances": {% include "../funded-accounts.json" %}
           }
         }
       },
