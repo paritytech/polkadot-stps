@@ -2,6 +2,10 @@ use log::{error, info, warn};
 use std::time::Duration;
 use subxt::{OnlineClient, PolkadotConfig};
 
+#[cfg(feature = "polkadot-parachain")]
+#[subxt::subxt(runtime_metadata_path = "metadata/polkadot-parachain.scale")]
+pub mod runtime {}
+
 #[cfg(feature = "tick")]
 #[subxt::subxt(runtime_metadata_path = "metadata/tick-meta.scale")]
 pub mod runtime {}

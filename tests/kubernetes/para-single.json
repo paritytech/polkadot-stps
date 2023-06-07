@@ -45,8 +45,8 @@
       "collator": {
         "name": "collator01",
         "ws_port": "9944",
-        "image": "parity/polkadot-collator",
-        "command": "polkadot-collator",
+        "image": "docker.io/parity/polkadot-parachain",
+        "command": "polkadot-parachain",
         "args": [
           "-lparachain=debug"
         ]
