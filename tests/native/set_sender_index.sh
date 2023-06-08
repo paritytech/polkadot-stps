@@ -1,1 +1,0 @@
-echo $1 > /tmp/sender_index
