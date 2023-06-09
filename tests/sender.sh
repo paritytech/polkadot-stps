@@ -1,12 +1,11 @@
 set -e
 
-# Usage: ./sender.sh <port> <total_senders> <num_of_transactions> <relaychain_or_parachain> <chain_metadata>
+# Usage: ./sender.sh <port> <total_senders> <num_of_transactions> <relaychain_or_parachain>
 
 PORT=$1
 TOTAL_SENDERS=$2
 NUM_TRX=$3
 RELAY_OR_PARA=$4
-CHAIN_METADATA=$5
 
 if [ $# -eq 0 ]
   then
@@ -14,26 +13,19 @@ if [ $# -eq 0 ]
     exit
 fi
 
-if [ $RELAY_OR_PARA == "relaychain"]
+if [ $RELAY_OR_PARA == "relaychain" ]
   then
-    if [ $CHAIN_METADATA == "rococo"]
-      then
-          SENDER_EXECUTABLE="https://github.com/paritytech/polkadot-stps/releases/download/v0.1.0-alpha/sender-rococo-linux-x86"
-      else
-          echo "Must set the sender executable to use the rococo metadata when testing Relaychain TPS!"
-          exit
-    fi
+    SENDER_EXECUTABLE="https://github.com/paritytech/polkadot-stps/releases/download/v0.1.0-alpha/sender-rococo-linux-x86"
+  else
+    echo "Must set the sender executable to use the rococo metadata when testing Relaychain TPS!"
+    exit
 fi
 
 if [ $RELAY_OR_PARA == "parachain" ]
   then
-    if [ $CHAIN_METADATA == "polkadot-parachain" ]
-      then
-        SENDER_EXECUTABLE=https://github.com/paritytech/polkadot-stps/releases/download/v0.1.0-alpha/sender-polkadot-parachain-linux-x86
-      else
-        echo "Must set the sender executable to use the polkadot-parachain metadata when testing Parachain TPS!"
-        exit
-    fi
+    SENDER_EXECUTABLE="https://github.com/paritytech/polkadot-stps/releases/download/v0.1.0-alpha/sender-polkadot-parachain-linux-x86"
+  else
+    echo "Must set the sender executable to use the polkadot-parachain metadata when testing Parachain TPS!"
 fi
 
 if [ ! -s sender ]

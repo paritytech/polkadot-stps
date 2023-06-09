@@ -1,14 +1,16 @@
-Network: ./para-native.json
+Network: ./single-para-native.json
 Creds: config
 
+# Nodes are up
 alice: is up within 600 secs
 bob: is up within 600 secs
+collator01: is up within 600 secs
 
-# Setting sender indexes
-collator01: run ./set_sender_index.sh with "0" within 1 seconds
+# Define sender index for first collator
+collator01: run ../set_sender_index.sh with "9999,1,1000,parachain,polkadot-parachain" within 300 seconds
 
-# Sending the extrinsics
-collator01: run ./sender.sh with "9999,1,16384,para" within 200 seconds
+# Sending the extrinsics, args: <port>, <num_senders>, <sender_index>, <para_or_relay>
+collator01: run ../sender.sh with "9999,1,1000,0,parachain" within 600 seconds
 
-# Calculate TPS.
-collator01: js-script ../utils.js with "calculate_tps,1,16384,tick" return is 0 within 600 secs
+# Start the TPS scraper on the validator
+alice: js-script ../utils.js with "calculate_tps,1,1000,polkadot-parachain,collator01,1000" within 600 secs
