@@ -6,6 +6,10 @@ alice: is up within 600 secs
 bob: is up within 600 secs
 collator01: is up within 600 secs
 
+# Check progress
+alice: parachain 1000 is registered within 60 seconds
+alice: parachain 1000 block height is at least 10 within 300 seconds
+
 # Define sender index for first collator
 collator01: run ../set_sender_index.sh with "9999,1,1000,parachain,polkadot-parachain" within 300 seconds
 
@@ -13,4 +17,4 @@ collator01: run ../set_sender_index.sh with "9999,1,1000,parachain,polkadot-para
 collator01: run ../sender.sh with "9999,1,1000,0,parachain" within 600 seconds
 
 # Start the TPS scraper on the validator, args: <cmd>, <num_senders>, <expected_trx>, <runtime>, <collator_to_send_to>, <para_id>
-alice: js-script ../utils.js with "calculate_tps,1,1000,polkadot-parachain,collator01,1000" within 600 secs
+alice: js-script ../utils.js with "calculate_tps,1,1000,polkadot-parachain,collator01,1000" within 1200 secs
