@@ -9,8 +9,8 @@ collator01: is up within 600 secs
 # Define sender index for first collator
 collator01: run ../set_sender_index.sh with "9999,1,1000,parachain,polkadot-parachain" within 300 seconds
 
-# Sending the extrinsics, args: <port>, <num_senders>, <sender_index>, <para_or_relay>
+# Sending the extrinsics, args: <port>, <num_senders>, <expected_trx>, <sender_index>, <para_or_relay>
 collator01: run ../sender.sh with "9999,1,1000,0,parachain" within 600 seconds
 
-# Start the TPS scraper on the validator
+# Start the TPS scraper on the validator, args: <cmd>, <num_senders>, <expected_trx>, <runtime>, <collator_to_send_to>, <para_id>
 alice: js-script ../utils.js with "calculate_tps,1,1000,polkadot-parachain,collator01,1000" within 600 secs
