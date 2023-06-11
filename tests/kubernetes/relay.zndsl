@@ -9,9 +9,8 @@ alice: is up within 600 secs
 {%- endfor %}
 
 # Sending the extrinsics
-{% for i in range(0, SENDERS) -%}
-  stps-{{ i }}: run ../sender.sh with "9944,{{SENDERS}},5000,{{i}},relaychain" within 200 seconds
-{%- endfor %}
+stps: js-script ../utils.js with "send_balance_transfers,{{SENDERS}},5000,polkadot-parachain" within 200 seconds
+
 
 # Calculate TPS.
 alice: js-script ../utils.js with "calculate_tps,{{SENDERS}},16384,rococo" return is 0 within 600 secs

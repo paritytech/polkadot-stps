@@ -15,9 +15,7 @@ alice: parachain 1000 block height is at least 10 within 300 seconds
 {%- endfor %}
 
 # Sending the extrinsics
-{% for i in range(0, SENDERS) -%}
-  stps-{{ i }}: run ../sender.sh with "9944,{{SENDERS}},5000,{{i}},parachain" within 200 seconds
-{%- endfor %}
+stps: js-script ../utils.js with "send_balance_transfers,{{SENDERS}},5000,polkadot-parachain" within 200 seconds
 
 # Start the TPS scraper on the validator, args: <cmd>, <num_senders>, <expected_trx>, <runtime>, <collator_to_send_to>, <para_id>
 alice: js-script ../utils.js with "calculate_tps,{{SENDERS}},5000,polkadot-parachain,collator01,1000" within 30 secs

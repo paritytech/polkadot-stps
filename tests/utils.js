@@ -9,6 +9,7 @@ async function run(nodeName, networkInfo, jsArgs) {
     const collator = jsArgs[4]; // the collator to create the parachain-rpc client for testing parachain TPS
     const paraId = jsArgs[5]; // the parachain-id used for testing parachain TPS
     let collatorUri = networkInfo.nodesByName[collator].wsUri;
+    let senderIndex = nodeName.split("-")[1];
 
     return new Promise((resolve, _reject) => {
         let cargoArgs;
