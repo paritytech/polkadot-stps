@@ -9,13 +9,19 @@
       {
         "name": "alice",
         "extra_args": [
-          "--alice"
+          "--alice",
+          "--no-hardware-benchmarks",
+          "--pool-limit=1000000000",
+          "--pool-kbytes=10000000000"
         ]
       },
       {
         "name": "bob",
         "extra_args": [
-          "--bob"
+          "--bob",
+          "--no-hardware-benchmarks",
+          "--pool-limit=1000000000",
+          "--pool-kbytes=10000000000"
         ]
       }
     ]
@@ -43,10 +49,7 @@
         {
           "name": "stps",
           "args": [
-            "-lparachain=debug",
-            "--no-hardware-benchmarks",
-            "--pool-limit=1000000000",
-            "--pool-kbytes=10000000000"
+            "-lparachain=debug"
           ],
          "count": "{{SENDERS}}"
         }

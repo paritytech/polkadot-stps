@@ -56,10 +56,7 @@
           "name": "stps",
           "ws_port": 9944,
           "args": [
-            "-lparachain=debug",
-            "--no-hardware-benchmarks",
-            "--pool-limit=1000000000",
-            "--pool-kbytes=10000000000"
+            "-lparachain=debug"
           ],
           "count": "{{SENDERS}}"
         }
