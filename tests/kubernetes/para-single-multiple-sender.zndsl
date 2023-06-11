@@ -16,7 +16,7 @@ alice: parachain 1000 block height is at least 10 within 300 seconds
 
 # Sending the extrinsics, args: <port>, <num_senders>, <expected_trx>, <sender_index>, <para_or_relay>
 {% for i in range(0, SENDERS) -%}
-  stps: run ../sender.sh with "9944,{{SENDERS}},5000,{{i}},parachain" within 200 seconds
+  stps-{{ i }}: run ../sender.sh with "9944,{{SENDERS}},5000,{{i}},parachain" within 200 seconds
 {%- endfor %}
 
 # Start the TPS scraper on the validator, args: <cmd>, <num_senders>, <expected_trx>, <runtime>, <collator_for_ws_client>, <para_id>
