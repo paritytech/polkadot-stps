@@ -36,4 +36,4 @@ fi
 
 SENDER_INDEX=`cat /tmp/sender_index`
 
-/tmp/sender --node-url ws://127.0.0.1:$PORT --total-senders $TOTAL_SENDERS -n $NUM_TRX --sender-index $SENDER_INDEX
+/tmp/sender --node-url ws://127.0.0.1:$PORT --total-senders $TOTAL_SENDERS --num $NUM_TRX --sender-index $SENDER_INDEX
