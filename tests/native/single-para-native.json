@@ -56,7 +56,6 @@
       "collator_groups": [
         {
           "name": "stps",
-          "ws_port": 9944,
           "args": [
             "-lparachain=debug",
             "--pool-limit=1000000000",
