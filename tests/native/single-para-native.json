@@ -48,7 +48,9 @@
         "image": "docker.io/parity/polkadot-parachain",
         "command": "polkadot-parachain",
         "args": [
-          "-lparachain=debug"
+          "-lparachain=debug",
+          "--pool-limit=1000000000",
+          "--pool-kbytes=10000000000"
         ]
       },
       "collator_groups": [
@@ -56,7 +58,9 @@
           "name": "stps",
           "ws_port": 9944,
           "args": [
-            "-lparachain=debug"
+            "-lparachain=debug",
+            "--pool-limit=1000000000",
+            "--pool-kbytes=10000000000"
           ],
           "count": "{{SENDERS}}"
         }
