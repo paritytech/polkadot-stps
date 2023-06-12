@@ -375,7 +375,7 @@ async fn main() -> Result<(), Error> {
 			let para_api = connect(&collator_url).await?;
 
 			// Create the channels
-			let (parablock_hash_sender, parablock_hash_receiver) = channel::<H256>(10);
+			let (parablock_hash_sender, parablock_hash_receiver) = channel::<H256>(100);
 			let (signal_sender, mut signal_receiver) = oneshot::channel::<bool>();
 
 			debug!("Spawning async task to subscribe to parablocks!");
