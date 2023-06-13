@@ -7,7 +7,7 @@ alice: is up within 600 secs
 alice: run ./set_sender_index.sh with "0" within 1 seconds
 
 # Sending the extrinsics
-alice: run ./sender.sh with "9944,1,16384,relay" within 200 seconds
+alice: run ./sender.sh with "9944,1,16384,relaychain" within 200 seconds
 
 # Calculate TPS.
 alice: js-script ../utils.js with "calculate_tps,1,16384,rococo" return is 0 within 600 secs

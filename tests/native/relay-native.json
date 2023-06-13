@@ -38,7 +38,7 @@
             "--pool-limit=1000000000",
             "--pool-kbytes=10000000000"
           ],
-	       "count": 3
+	       "count": "{{SENDERS}}"
 	      }
       ]
     },

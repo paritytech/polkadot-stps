@@ -4,7 +4,10 @@ use log::*;
 use parity_scale_codec::Decode;
 use polkadot_primitives::{v4::CandidateReceipt, Hash, Id};
 use subxt::utils::H256;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::sync::{
+	mpsc::{channel, Receiver, Sender},
+	oneshot
+};
 use tokio::time::Duration;
 use utils::{connect, runtime, Api, Error};
 
@@ -70,13 +73,15 @@ struct Args {
 	prometheus_port: u16,
 }
 
-/// in case we're monitoring TPS on a parachain
-/// we spawn a thread to subscribe for CandidateIncluded events coming from the relay chain
-/// so we can signal to the calc_para_tps thread which finalized block to scrape
-async fn subscribe(relay_api: &Api, tx: Sender<H256>, para_id: u32) -> Result<(), Error> {
-	// Subscribe to all finalized blocks:
+/// In case we're monitoring TPS on a parachain this function subscribes to parablocks,
+/// and awaits a signal from main thread to stop execution.
+async fn subscribe(
+	relay_api: Api,
+	para_id: u32,
+	mut signal_receiver: oneshot::Receiver<bool>,
+	parablock_hash_sender: Sender<H256>,
+) -> Result<(), Error> {
 	let mut blocks_sub = relay_api.blocks().subscribe_finalized().await?;
-	// For each block, check if the CandidateIncluded extrinsic occurs
 	while let Some(block) = blocks_sub.next().await {
 		let block = block?;
 		let body = block.body().await?;
@@ -88,18 +93,16 @@ async fn subscribe(relay_api: &Api, tx: Sender<H256>, para_id: u32) -> Result<()
 				let evt = evt?;
 				let event_name = evt.variant_name();
 				if event_name == "CandidateIncluded" {
-					// If the CandidateIncluded event occurs, we need to get the CandidateDescriptor by decoding bytes
 					let mut values = evt.field_bytes();
 					let candidate_receipt = CandidateReceipt::<Hash>::decode(&mut values)?;
 					let descriptor = candidate_receipt.descriptor();
-					// Only count TPS for the para_id we are interested in
 					let parablock_para_id = descriptor.para_id;
 					if parablock_para_id.eq(&Id::new(para_id)) {
 						debug!(
 							"New ParaHead: {:?} for ParaId: {:?}",
 							descriptor.para_head, parablock_para_id
 						);
-						tx.send(descriptor.para_head).await?;
+						parablock_hash_sender.send(descriptor.para_head).await?;
 					} else {
 						debug!(
 							"New ParaHead: {:?} for ParaId: {:?} which we are not calculating (s)TPS for",
@@ -109,17 +112,30 @@ async fn subscribe(relay_api: &Api, tx: Sender<H256>, para_id: u32) -> Result<()
 				}
 			}
 		}
+		// If we received a signal to stop execution, break the loop
+		match signal_receiver.try_recv() {
+			Ok(_) => {
+				debug!("Worker stop signal received, now stopping execution!");
+				break;
+			},
+			Err(err) => {
+				trace!("Tried to receive on oneshot channel: {:?}", err);
+				continue;
+			},
+		}
 	}
 	Ok(())
 }
 
-/// in case we're monitoring TPS on a parachain
-/// calc_para_tps thread listens for which parachain block to scrape
+/// In case we're monitoring TPS on a parachain this function subscribes to a parablock hash,
+/// and calculates the transfer events within the parablock as well as the parablock time.
+/// Once the number of expected transactions is calculated, it signals to the main thread to stop execution.
 async fn calc_para_tps(
-	para_api: &Api,
-	mut rx: Receiver<H256>,
+	para_api: Api,
+	mut parablock_hash_receiver: Receiver<H256>,
+	signal_sender: tokio::sync::oneshot::Sender<bool>,
 	default_parablock_time: u64,
-	n: usize,
+	expected_transactions: usize,
 	prometheus_metrics: Option<StpsMetrics>,
 ) -> Result<(), Error> {
 	let storage_timestamp_storage_addr = runtime::storage().timestamp().now();
@@ -127,7 +143,7 @@ async fn calc_para_tps(
 	let mut total_count = 0;
 	let mut tps_vec = Vec::new();
 
-	while let Some(para_head) = rx.recv().await {
+	while let Some(para_head) = parablock_hash_receiver.recv().await {
 		debug!("Received ParaHead: {:?}", para_head);
 		let parablock = para_api.blocks().at(para_head).await?;
 		let parabody = parablock.body().await?;
@@ -144,7 +160,6 @@ async fn calc_para_tps(
 		let maybe_previous_parablock_hash =
 			para_api.rpc().block_hash(Some(previous_parablock_number.into())).await?;
 
-		// Need to handle the case where we cannot get the previous parablock timestamp
 		let parablock_time = match maybe_previous_parablock_hash {
 			Some(previous_hash) => {
 				let parablock_timestamp = para_api
@@ -163,7 +178,6 @@ async fn calc_para_tps(
 				debug!("Parablock time estimated at: {:?}ms", time_diff);
 				time_diff
 			},
-			// Assume default if unable to get the previous parablock from parablock number
 			None => {
 				warn!(
 					"Unable to calculate parablock time. Assuming default parablock time of: {:?}s",
@@ -172,7 +186,7 @@ async fn calc_para_tps(
 				Duration::as_secs_f64(&Duration::new(default_parablock_time, 0)) as u64
 			},
 		};
-
+		debug!("Checking extrinsics in parablock: {:?}", parablock_number);
 		for extrinsic in parabody.extrinsics().iter() {
 			let extrinsic = extrinsic?;
 			let events = extrinsic.events().await?;
@@ -185,28 +199,38 @@ async fn calc_para_tps(
 				}
 			}
 		}
-
+		debug!("Found {:?} transfers in parablock: {:?}", trx_in_parablock, parablock_number);
 		if trx_in_parablock > 0 {
 			let tps = trx_in_parablock as f32 / (parablock_time as f32 / 1000.0);
 			tps_vec.push(tps);
 			info!("TPS on parablock {}: {}", parablock_number, tps);
+			info!("Total transactions processed: {}", total_count);
+			debug!("Remaining transactions to process: {}", expected_transactions - total_count);
 		}
 
-		if total_count >= n {
-			let avg_tps: f32 = tps_vec.iter().sum::<f32>() / tps_vec.len() as f32;
-			info!("Average TPS is estimated as: {}", avg_tps);
-			total_count = 0;
-		}
-
-		// send metrics to prometheus, if enabled
+		// Send metrics to prometheus, if enabled
 		if let Some(metrics) = &prometheus_metrics {
 			metrics.set(trx_in_parablock, parablock_time, parablock_number);
 		}
 
-		// reset counter
+		// Reset counter
 		trx_in_parablock = 0;
-	}
 
+		// Check whether to exit the loop
+		if total_count >= expected_transactions {
+			let avg_tps: f32 = tps_vec.iter().sum::<f32>() / tps_vec.len() as f32;
+			info!("Average TPS is estimated as: {}", avg_tps);
+			match signal_sender.send(true) {
+				Ok(_) => {
+					debug!("Signaled to stop execution!");
+				},
+				Err(_) => {
+					panic!("Failed to send signal to stop execution, exiting!");
+				},
+			}
+			break
+		}
+	}
 	Ok(())
 }
 
@@ -313,16 +337,11 @@ async fn main() -> Result<(), Error> {
 	env_logger::init_from_env(
 		env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info"),
 	);
-
 	let args = Args::parse();
 	let para_finality = args.para_finality;
 	let genesis = args.genesis;
-
-	// Sanity check for use
-	if para_finality && genesis == true {
-		panic!("Cannot set both --para-finality and --genesis simultaneously!");
-	}
-
+	let default_parablock_time = args.default_parablock_time;
+	let expected_transactions = args.num;
 	let prometheus_metrics = match args.prometheus {
 		true => Some(run_prometheus_endpoint(&args.prometheus_url, &args.prometheus_port).await?),
 		false => None,
@@ -330,9 +349,9 @@ async fn main() -> Result<(), Error> {
 
 	match para_finality {
 		true => {
-			info!("Starting TPS in parachain mode");
-			// Don't need to process many messages concurrently as throughput depends on parablock times
-			let (tx, rx) = channel::<H256>(10);
+			if genesis == true {
+				panic!("Cannot start TPS in parachain mode with --genesis flag!");
+			}
 
 			let validator_url = match args.validator_url {
 				Some(s) => s,
@@ -340,40 +359,40 @@ async fn main() -> Result<(), Error> {
 					"Must set --collator-url and --validator-url when enabling --para-finality!"
 				),
 			};
-
 			let collator_url = match args.collator_url {
 				Some(s) => s,
 				None => panic!(
 					"Must set --collator-url and --validator-url when enabling --para-finality!"
 				),
 			};
-
 			let para_id = match args.para_id {
 				Some(id) => id,
 				None => panic!("Must set --para-id to specify which parachain to track when enabling --para-finality!")
 			};
 
-			// Create the RPC clients
+			info!("Starting TPS in parachain mode");
 			let relay_api = connect(&validator_url).await?;
 			let para_api = connect(&collator_url).await?;
-			debug!("Spawning new async task for subscribing to relay chain blocks");
+
+			// Create the channels
+			let (parablock_hash_sender, parablock_hash_receiver) = channel::<H256>(100);
+			let (signal_sender, mut signal_receiver) = oneshot::channel::<bool>();
+
+			debug!("Spawning async task to subscribe to parablocks!");
 			tokio::spawn(async move {
-				match subscribe(&relay_api, tx, para_id).await {
+				match subscribe(relay_api, para_id, signal_receiver, parablock_hash_sender).await {
 					Ok(_) => (),
-					Err(error) => panic!("{:?}", error),
+					Err(err) => panic!("Error! {:?}", err)
 				}
 			});
-			debug!("Counting Transfer events frommain thread");
-			calc_para_tps(&para_api, rx, args.default_parablock_time, args.num, prometheus_metrics)
-				.await?;
+			calc_para_tps(para_api, parablock_hash_receiver, signal_sender, default_parablock_time, expected_transactions, prometheus_metrics).await?;
 		},
-
 		false => {
-			info!("Starting TPS in relaychain mode");
 			let node_url = match args.node_url {
 				Some(s) => s,
 				None => panic!("Must pass --node-url when setting --para-finality to 'false'"),
 			};
+			info!("Starting TPS in relaychain mode");
 			let n_tx_truncated = (args.num / args.total_senders) * args.total_senders;
 			let api = connect(&node_url).await?;
 			calc_relay_tps(&api, n_tx_truncated, args.genesis, prometheus_metrics).await?;

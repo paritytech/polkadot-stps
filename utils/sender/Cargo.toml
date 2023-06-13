@@ -22,6 +22,7 @@ name = "sender"
 
 [features]
 tick = ["utils/tick"]
+polkadot-parachain = ["utils/polkadot-parachain"]
 rococo = ["utils/rococo"]
 versi-tick = ["utils/versi-tick"]
 versi-relay = ["utils/versi-relay"]

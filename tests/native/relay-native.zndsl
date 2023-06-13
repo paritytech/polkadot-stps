@@ -3,8 +3,13 @@ Creds: config
 
 alice: is up within 600 secs
 
+# Setting sender indexes
+{% for i in range(0, SENDERS) -%}
+  stps-{{ i }}: run ../set_sender_index.sh with "{{i}}" within 2 seconds
+{%- endfor %}
+
 # Sending the extrinsics
-stps: js-script ../utils.js with "send_balance_transfers,3,16384,rococo" return is 0 within 1200 secs
+stps: js-script ../utils.js with "send_balance_transfers,{{SENDERS}},16384,rococo" return is 0 within 1200 secs
 
 # Calculate TPS.
 # TODO return the TPS and assert its value.

@@ -37,22 +37,30 @@
       "cumulus_based": true,
       "genesis": {
         "runtime": {
-          "runtime_genesis_config": {
-            "balances": {
-              "balances": {% include "../funded-accounts.json" %}
-            }
+          "balances": {
+            "balances": {% include "../funded-accounts.json" %}
           }
         }
       },
       "collator": {
         "name": "collator01",
         "ws_port": "9944",
-        "image": "parity/polkadot-collator",
-        "command": "polkadot-collator",
+        "image": "docker.io/parity/polkadot-parachain",
+        "command": "polkadot-parachain",
         "args": [
           "-lparachain=debug"
         ]
-      }
+      },
+      "collator_groups": [
+        {
+          "name": "stps",
+          "ws_port": 9944,
+          "args": [
+            "-lparachain=debug"
+          ],
+          "count": "{{SENDERS}}"
+        }
+      ]
     }
   ]
 }
