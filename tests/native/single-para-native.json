@@ -21,7 +21,7 @@
       {
         "name": "bob",
         "validator": true,
-        "ws_port": 9944,
+        "ws_port": 9945,
         "args": [
           "--alice",
           "-lparachain=debug",
@@ -44,7 +44,7 @@
       },
       "collator": {
         "name": "collator01",
-        "ws_port": "9944",
+        "ws_port": "9999",
         "image": "docker.io/parity/polkadot-parachain",
         "command": "polkadot-parachain",
         "args": [
