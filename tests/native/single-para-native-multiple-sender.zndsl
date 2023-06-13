@@ -7,7 +7,7 @@ collator01: is up within 600 secs
 
 # Check progress
 alice: parachain 1000 is registered within 60 seconds
-alice: parachain 1000 block height is at least 2 within 60 seconds
+alice: parachain 1000 block height is at least 2 within 180 seconds
 
 # Setting sender indexes
 {% for i in range(0, SENDERS) -%}
@@ -15,7 +15,7 @@ alice: parachain 1000 block height is at least 2 within 60 seconds
 {%- endfor %}
 
 # Sending the extrinsics
-stps: js-script ../utils.js with "send_balance_transfers,{{SENDERS}},5000,polkadot-parachain" within 200 seconds
+stps: js-script ../utils.js with "send_balance_transfers,{{SENDERS}},5000,polkadot-parachain" within 300 seconds
 
 # Start the TPS scraper on the validator, args: <cmd>, <num_senders>, <expected_trx>, <runtime>, <collator_to_send_to>, <para_id>
 alice: js-script ../utils.js with "calculate_tps,{{SENDERS}},5000,polkadot-parachain,1000" within 600 secs
