@@ -2,7 +2,7 @@ use clap::Parser;
 use futures_util::StreamExt;
 use log::*;
 use parity_scale_codec::Decode;
-use polkadot_primitives::{v4::CandidateReceipt, Hash, Id};
+use polkadot_primitives::{CandidateReceipt, Hash, Id};
 use subxt::utils::H256;
 use tokio::sync::{
 	mpsc::{channel, Receiver, Sender},
