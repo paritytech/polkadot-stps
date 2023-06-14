@@ -7,7 +7,11 @@ async function run(nodeName, networkInfo, jsArgs) {
     const totalTx = jsArgs[2];
     const relayOrPara = jsArgs[3]; // rococo or polkadot-parachain, used for compilation features
     const paraId = jsArgs[4]; // the parachain-id used for testing parachain TPS
-    const collatorUri = networkInfo.nodesByName["collator01"].wsUri;
+    const collator = jsArgs[5];
+    let collatorUri;
+    if (collator) {
+        collatorUri = networkInfo.nodesByName[collator].wsUri;
+    }
     let senderIndex = nodeName.split("-")[1];
 
     return new Promise((resolve, _reject) => {
