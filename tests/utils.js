@@ -1,14 +1,17 @@
 const { spawn, ChildProcess } = require('child_process');
 
 async function run(nodeName, networkInfo, jsArgs) {
-    const wsUri = networkInfo.nodesByName[nodeName].wsUri;
+    const {wsUri} = networkInfo.nodesByName[nodeName];
     const cmd = jsArgs[0];
     const totalSenders = jsArgs[1];
     const totalTx = jsArgs[2];
     const relayOrPara = jsArgs[3]; // rococo or polkadot-parachain, used for compilation features
-    const collator = jsArgs[4]; // the collator to create the parachain-rpc client for testing parachain TPS
-    const paraId = jsArgs[5]; // the parachain-id used for testing parachain TPS
-    let collatorUri = networkInfo.nodesByName[collator].wsUri;
+    const paraId = jsArgs[4]; // the parachain-id used for testing parachain TPS
+    const collator = jsArgs[5];
+    let collatorUri;
+    if (collator) {
+        collatorUri = networkInfo.nodesByName[collator].wsUri;
+    }
     let senderIndex = nodeName.split("-")[1];
 
     return new Promise((resolve, _reject) => {

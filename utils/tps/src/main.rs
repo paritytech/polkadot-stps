@@ -6,7 +6,9 @@ use polkadot_primitives::{CandidateReceipt, Hash, Id};
 use subxt::utils::H256;
 use tokio::sync::{
 	mpsc::{channel, Receiver, Sender},
-	oneshot
+	oneshot::Sender as OneshotSender,
+	oneshot::Receiver as OneshotReceiver,
+	oneshot::channel as oneshot_channel,
 };
 use tokio::time::Duration;
 use utils::{connect, runtime, Api, Error};
@@ -78,7 +80,7 @@ struct Args {
 async fn subscribe(
 	relay_api: Api,
 	para_id: u32,
-	mut signal_receiver: oneshot::Receiver<bool>,
+	mut signal_receiver: OneshotReceiver<bool>,
 	parablock_hash_sender: Sender<H256>,
 ) -> Result<(), Error> {
 	let mut blocks_sub = relay_api.blocks().subscribe_finalized().await?;
@@ -129,11 +131,11 @@ async fn subscribe(
 
 /// In case we're monitoring TPS on a parachain this function subscribes to a parablock hash,
 /// and calculates the transfer events within the parablock as well as the parablock time.
-/// Once the number of expected transactions is calculated, it signals to the main thread to stop execution.
+/// Once the number of expected transactions is calculated, it signals to the subscriber thread to stop execution.
 async fn calc_para_tps(
 	para_api: Api,
 	mut parablock_hash_receiver: Receiver<H256>,
-	signal_sender: tokio::sync::oneshot::Sender<bool>,
+	signal_sender: OneshotSender<bool>,
 	default_parablock_time: u64,
 	expected_transactions: usize,
 	prometheus_metrics: Option<StpsMetrics>,
@@ -204,7 +206,7 @@ async fn calc_para_tps(
 			let tps = trx_in_parablock as f32 / (parablock_time as f32 / 1000.0);
 			tps_vec.push(tps);
 			info!("TPS on parablock {}: {}", parablock_number, tps);
-			info!("Total transactions processed: {}", total_count);
+			debug!("Total transactions processed: {}", total_count);
 			debug!("Remaining transactions to process: {}", expected_transactions - total_count);
 		}
 
@@ -376,7 +378,7 @@ async fn main() -> Result<(), Error> {
 
 			// Create the channels
 			let (parablock_hash_sender, parablock_hash_receiver) = channel::<H256>(100);
-			let (signal_sender, mut signal_receiver) = oneshot::channel::<bool>();
+			let (signal_sender, signal_receiver) = oneshot_channel::<bool>();
 
 			debug!("Spawning async task to subscribe to parablocks!");
 			tokio::spawn(async move {
