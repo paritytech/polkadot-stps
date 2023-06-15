@@ -54,7 +54,8 @@
       "collator_groups": [
         {
           "name": "stps",
-          "ws_port": 9944,
+          "image": "docker.io/parity/polkadot-parachain",
+          "command": "polkadot-parachain",
           "args": [
             "-lparachain=debug"
           ],
