@@ -1,4 +1,4 @@
-use log::{error, info, warn};
+use log::{error, debug, info, warn};
 use std::time::Duration;
 use subxt::{OnlineClient, PolkadotConfig};
 
@@ -37,12 +37,12 @@ pub const DERIVATION: &str = "//Sender/";
 /// Tries [`MAX_ATTEMPTS`] times to connect to the given node.
 pub async fn connect(url: &str) -> Result<Api, Error> {
 	for i in 1..=MAX_ATTEMPTS {
-		info!("Attempt #{}: Connecting to {}", i, url);
+		debug!("Attempt #{}: Connecting to {}", i, url);
 		let promise = OnlineClient::<PolkadotConfig>::from_url(url);
 
 		match promise.await {
 			Ok(client) => {
-				info!("Connection established to: {}", url);
+				debug!("Connection established to: {}", url);
 				return Ok(client);
 			},
 			Err(err) => {

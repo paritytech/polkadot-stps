@@ -22,13 +22,13 @@ struct Args {
 	#[arg(long)]
 	node_url: String,
 
-	/// Sender index.
+	/// EREW PRAM model is assumed, so the number of senders is equal to the number of threads.
 	#[arg(long)]
-	sender_index: usize,
+	threads: usize, 
 
 	/// Total number of senders
 	#[arg(long)]
-	total_senders: usize,
+	total_senders: Option<usize>,
 
 	/// Chunk size for sending the extrinsics.
 	#[arg(long, default_value_t = 50)]
@@ -40,14 +40,18 @@ struct Args {
 }
 
 async fn send_funds(
-	api: &Api,
-	sender_index: usize,
-	chunk_size: usize,
-	n_tx_sender: usize,
+	node_url: &str,
+	sender_index: &usize,
+	chunk_size: &usize,
+	n_tx_sender: &usize,
 ) -> Result<(), Error> {
+	let sender_index = *sender_index;
+	let n_tx_sender = *n_tx_sender;
+	let chunk_size = *chunk_size;
 	let receivers = generate_receivers(n_tx_sender, sender_index); // one receiver per tx
 
 	let ext_deposit_addr = runtime::constants().balances().existential_deposit();
+	let api = connect(node_url).await?;
 	let ext_deposit = api.constants().at(&ext_deposit_addr)?;
 
 	info!("Sender {}: signing {} transactions", sender_index, n_tx_sender);
@@ -133,13 +137,66 @@ async fn main() -> Result<(), Error> {
 	);
 
 	let args = Args::parse();
-	let api = connect(&args.node_url).await?;
-	let n_tx_sender = args.num / args.total_senders;
+	let node_url = args.node_url;
+	let threads = args.threads;
+	let chunk_size = args.chunk_size;
+	let n_tx_sender = match args.total_senders {
+		Some(senders) => args.num / senders,
+		// In case the optional total_senders argument is not passed,
+		// we must make sure that we split the work evenly between threads.
+		None => args.num / threads
+	};
 
-	pre_conditions(&api, args.sender_index, n_tx_sender).await?;
-
-	send_funds(&api, args.sender_index, args.chunk_size, n_tx_sender).await?;
-
+	match args.threads {
+		// Multi-threaded mode
+		n if n > 1 => {
+			info!("Starting sender in parallel mode");
+			// Pre-checks
+			let mut precheck_set = tokio::task::JoinSet::new();
+			for i in 0..n {
+				let api_url = node_url.clone();
+				precheck_set.spawn(async move { 
+					pre_conditions(&api_url, &i, &n_tx_sender).await;
+				});
+			}
+			while let Some(result) = precheck_set.join_next().await {
+				match result {
+					Ok(_) => info!("Preconditions task succeeded"),
+					Err(e) => {
+						error!("Error: {:?}", e);
+					}
+				}
+			}
+			// Send funds
+			let mut send_set = tokio::task::JoinSet::new();
+			for i in 0..n {
+				let api_url = node_url.clone();
+				send_set.spawn(async move { 
+					send_funds(&api_url, &i, &chunk_size, &n_tx_sender).await;
+				});
+			}
+			while let Some(result) = send_set.join_next().await {
+				match result {
+					Ok(_) => debug!("Send funds task succeeded"),
+					Err(e) => {
+						error!("Error: {:?}", e);
+					}
+				}
+			}
+		},
+		// Single-threaded mode
+		n if n == 1 => {
+			debug!("Starting sender in single-threaded mode");
+			pre_conditions(&node_url, &0, &n_tx_sender).await?;
+			send_funds(&node_url, &0, &chunk_size, &n_tx_sender).await?;
+		},
+		// Invalid number of threads
+		n if n < 1 => {
+			panic!("Must specify number of threads greater than 0")
+		}
+		// All other non-sensical cases
+		_ => panic!("Number of threads must be 1, or greater!")
+	}
 	Ok(())
 }
 

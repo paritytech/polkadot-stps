@@ -2,10 +2,10 @@ use log::*;
 use sp_core::{sr25519::Pair as SrPair, Pair};
 use subxt::{tx::PairSigner, utils::AccountId32, PolkadotConfig};
 
-use utils::{runtime, Api, Error, DERIVATION};
+use utils::{runtime, Api, Error, DERIVATION, connect};
 
 /// Check pre-conditions of accounts attributed to this sender
-pub async fn pre_conditions(api: &Api, i: usize, n: usize) -> Result<(), Error> {
+pub async fn pre_conditions(node_url: &str, i: &usize, n: &usize) -> Result<(), Error> {
 	info!(
 		"Sender {}: checking pre-conditions of accounts {}{} through {}{}",
 		i,
@@ -14,16 +14,15 @@ pub async fn pre_conditions(api: &Api, i: usize, n: usize) -> Result<(), Error> 
 		DERIVATION,
 		(i + 1) * n - 1
 	);
-
+	let api = connect(node_url).await?;
 	for j in i * n..(i + 1) * n {
 		let pair: SrPair =
 			Pair::from_string(format!("{}{}", DERIVATION, j).as_str(), None).unwrap();
 		let signer: PairSigner<PolkadotConfig, SrPair> = PairSigner::new(pair);
 		let account = signer.account_id();
-		info!("Checking account: {}", account);
+		info!("Sender {}: checking account {}", i, account);
 		check_account(&api, account).await?;
 	}
-
 	Ok(())
 }
 
