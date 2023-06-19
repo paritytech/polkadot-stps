@@ -23,6 +23,7 @@ pub async fn pre_conditions(node_url: &str, i: &usize, n: &usize) -> Result<(), 
 		info!("Sender {}: checking account {}", i, account);
 		check_account(&api, account).await?;
 	}
+	debug!("Sender {}: all pre-conditions checked and succeeded!", i);
 	Ok(())
 }
 
