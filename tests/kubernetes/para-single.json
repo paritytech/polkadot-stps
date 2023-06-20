@@ -6,6 +6,17 @@
     "default_image": "docker.io/parity/polkadot:latest",
     "chain": "rococo-local",
     "default_command": "polkadot",
+    "genesis": {
+      "runtime": {
+        "runtime_genesis_config": {
+          "configuration": {
+            "config": {
+              "max_pov_size": 5242880
+            }
+          }
+        }
+      }
+    },
     "nodes": [
       {
         "name": "alice",
