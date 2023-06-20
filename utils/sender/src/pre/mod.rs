@@ -19,7 +19,7 @@ pub async fn pre_conditions(api: &Api, i: &usize, n: &usize) -> Result<(), Error
 			Pair::from_string(format!("{}{}", DERIVATION, j).as_str(), None).unwrap();
 		let signer: PairSigner<PolkadotConfig, SrPair> = PairSigner::new(pair);
 		let account = signer.account_id();
-		info!("Sender {}: checking account {}", i, account);
+		debug!("Sender {}: checking account {}", i, account);
 		check_account(&api, account).await?;
 	}
 	debug!("Sender {}: all pre-conditions checked and succeeded!", i);

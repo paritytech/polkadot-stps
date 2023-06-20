@@ -179,7 +179,7 @@ fn parallel_signing(
 				Ok(_) => (),
 				Err(e) => error!("Thread {}: failed to send transactions to consumer: {}", i, e),
 			}
-			debug!("Thread {}: prepared and signed {} transactions", i, n_tx_sender);
+			info!("Thread {}: prepared and signed {} transactions", i, n_tx_sender);
 		});
 	}
 	Ok(())
