@@ -231,6 +231,7 @@ async fn main() -> Result<(), Error> {
 		None => args.num / threads
 	};
 
+	// Create the client here, so that we can use it in the various functions.
 	let api = connect(&node_url).await?;
 
 	match args.threads {
@@ -246,7 +247,6 @@ async fn main() -> Result<(), Error> {
 			debug!("Starting sender in single-threaded mode");
 			match args.sender_index {
 				Some(i) => {
-					let api = connect(&node_url).await?;
 					pre_conditions(&api, &sender_index, &n_tx_sender).await?;
 					send_funds(&api, sender_index, chunk_size, n_tx_sender).await?;
 				},
