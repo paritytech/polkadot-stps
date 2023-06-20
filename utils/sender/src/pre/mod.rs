@@ -2,7 +2,7 @@ use log::*;
 use sp_core::{sr25519::Pair as SrPair, Pair};
 use subxt::{tx::PairSigner, utils::AccountId32, PolkadotConfig};
 
-use utils::{runtime, Api, Error, DERIVATION, connect};
+use utils::{runtime, Api, Error, DERIVATION};
 
 /// Check pre-conditions of accounts attributed to this sender
 pub async fn pre_conditions(api: &Api, i: &usize, n: &usize) -> Result<(), Error> {
@@ -37,10 +37,10 @@ pub async fn parallel_pre_conditions(
 	for i in 0..*threads {
 		let api = api.clone();
 		let n_tx_sender = n_tx_sender.clone();
-		precheck_set.spawn(async move { 
+		precheck_set.spawn(async move {
 			match pre_conditions(&api, &i, &n_tx_sender).await {
 				Ok(_) => Ok(()),
-				Err(e) => Err(e)
+				Err(e) => Err(e),
 			}
 		});
 	}
@@ -49,7 +49,7 @@ pub async fn parallel_pre_conditions(
 			Ok(_) => (),
 			Err(e) => {
 				error!("Error: {:?}", e);
-			}
+			},
 		}
 	}
 	Ok(())

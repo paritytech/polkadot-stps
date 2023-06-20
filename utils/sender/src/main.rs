@@ -2,7 +2,6 @@ use clap::Parser;
 use codec::Decode;
 use futures::future::try_join_all;
 use log::*;
-use tokio::sync::mpsc;
 use sp_core::{sr25519::Pair as SrPair, Pair};
 use subxt::{
 	config::extrinsic_params::{BaseExtrinsicParamsBuilder as Params, Era},
@@ -13,7 +12,7 @@ use utils::{connect, runtime, Api, Error, DERIVATION};
 
 mod pre;
 
-use pre::{pre_conditions, parallel_pre_conditions};
+use pre::{parallel_pre_conditions, pre_conditions};
 
 /// Util program to send transactions
 #[derive(Parser, Debug)]
@@ -138,7 +137,14 @@ fn parallel_signing(
 	api: &Api,
 	threads: &usize,
 	n_tx_sender: usize,
-	producer: tokio::sync::mpsc::UnboundedSender<Vec<Result<SubmittableExtrinsic<PolkadotConfig, subxt::OnlineClient<PolkadotConfig>>, subxt::Error>>>,
+	producer: tokio::sync::mpsc::UnboundedSender<
+		Vec<
+			Result<
+				SubmittableExtrinsic<PolkadotConfig, subxt::OnlineClient<PolkadotConfig>>,
+				subxt::Error,
+			>,
+		>,
+	>,
 ) -> Result<(), Error> {
 	let ext_deposit_addr = runtime::constants().balances().existential_deposit();
 	let genesis_hash = api.genesis_hash();
@@ -162,13 +168,17 @@ fn parallel_signing(
 				let tx_payload = runtime::tx()
 					.balances()
 					.transfer_keep_alive(receivers[j as usize].clone().into(), ext_deposit);
-				let signed_tx = match api.tx().create_signed_with_nonce(&tx_payload, &signer, 0, tx_params) {
-					Ok(signed) => Ok(signed),
-					Err(e) => Err(e)
-				};
+				let signed_tx =
+					match api.tx().create_signed_with_nonce(&tx_payload, &signer, 0, tx_params) {
+						Ok(signed) => Ok(signed),
+						Err(e) => Err(e),
+					};
 				txs.push(signed_tx);
 			}
-			producer.send(txs);
+			match producer.send(txs) {
+				Ok(_) => (),
+				Err(e) => error!("Thread {}: failed to send transactions to consumer: {}", i, e),
+			}
 			debug!("Thread {}: prepared and signed {} transactions", i, n_tx_sender);
 		});
 	}
@@ -178,7 +188,14 @@ fn parallel_signing(
 /// Here, the signed extrinsics are submitted.
 /// TODO: Optimise this
 async fn submit_txs(
-	consumer: &mut tokio::sync::mpsc::UnboundedReceiver<Vec<Result<SubmittableExtrinsic<PolkadotConfig, subxt::OnlineClient<PolkadotConfig>>, subxt::Error>>>,
+	consumer: &mut tokio::sync::mpsc::UnboundedReceiver<
+		Vec<
+			Result<
+				SubmittableExtrinsic<PolkadotConfig, subxt::OnlineClient<PolkadotConfig>>,
+				subxt::Error,
+			>,
+		>,
+	>,
 	chunk_size: usize,
 	threads: usize,
 ) -> Result<(), Error> {
@@ -197,7 +214,7 @@ async fn submit_txs(
 								let hash = tx.submit();
 								hashes.push(hash);
 							},
-							Err(e) => panic!("Error: {:?}", e)
+							Err(e) => panic!("Error: {:?}", e),
 						}
 					}
 				}
@@ -219,19 +236,19 @@ async fn main() -> Result<(), Error> {
 	let node_url = args.node_url;
 	let threads = args.threads;
 	let chunk_size = args.chunk_size;
-	
+
 	// This index is optional and only set when single-threaded mode is used.
 	// If it is not set, we default to 0.
 	let sender_index = match args.sender_index {
 		Some(i) => i,
-		None => 0
+		None => 0,
 	};
 
 	// In case the optional total_senders argument is not passed for single-threaded mode,
 	// we must make sure that we split the work evenly between threads for multi-threaded mode.
 	let n_tx_sender = match args.total_senders {
 		Some(tot_s) => args.num / tot_s,
-		None => args.num / threads
+		None => args.num / threads,
 	};
 
 	// Create the client here, so that we can use it in the various functions.
@@ -241,8 +258,14 @@ async fn main() -> Result<(), Error> {
 		n if n > 1 => {
 			info!("Starting sender in parallel mode");
 			let (producer, mut consumer) = tokio::sync::mpsc::unbounded_channel();
+			// I/O Bound
 			parallel_pre_conditions(&api, &threads, &n_tx_sender).await?;
-			parallel_signing(&api, &threads, n_tx_sender, producer);
+			// CPU Bound
+			match parallel_signing(&api, &threads, n_tx_sender, producer) {
+				Ok(_) => (),
+				Err(e) => panic!("Error: {:?}", e),
+			}
+			// I/O Bound
 			submit_txs(&mut consumer, chunk_size, threads).await?;
 		},
 		// Single-threaded mode
@@ -250,18 +273,18 @@ async fn main() -> Result<(), Error> {
 			debug!("Starting sender in single-threaded mode");
 			match args.sender_index {
 				Some(i) => {
-					pre_conditions(&api, &sender_index, &n_tx_sender).await?;
+					pre_conditions(&api, &i, &n_tx_sender).await?;
 					send_funds(&api, sender_index, chunk_size, n_tx_sender).await?;
 				},
-				None => panic!("Must set sender index when running in single-threaded mode")
+				None => panic!("Must set sender index when running in single-threaded mode"),
 			}
 		},
 		// Invalid number of threads
 		n if n < 1 => {
 			panic!("Must specify number of threads greater than 0")
-		}
+		},
 		// All other non-sensical cases
-		_ => panic!("Number of threads must be 1, or greater!")
+		_ => panic!("Number of threads must be 1, or greater!"),
 	}
 	Ok(())
 }
