@@ -261,10 +261,6 @@ async fn main() -> Result<(), Error> {
 				None => panic!("Must set sender index when running in single-threaded mode"),
 			}
 		},
-		// Invalid number of threads
-		n if n < 1 => {
-			panic!("Must specify number of threads greater than 0")
-		},
 		// All other non-sensical cases
 		_ => panic!("Number of threads must be 1, or greater!"),
 	}
