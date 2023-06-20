@@ -1,6 +1,8 @@
-use log::{error, debug, info, warn};
+use log::{error, debug, warn};
 use std::time::Duration;
 use subxt::{OnlineClient, PolkadotConfig};
+use jsonrpsee::ws_client::WsClientBuilder;
+use std::sync::Arc;
 
 #[cfg(feature = "polkadot-parachain")]
 #[subxt::subxt(runtime_metadata_path = "metadata/polkadot-parachain.scale")]
@@ -38,9 +40,13 @@ pub const DERIVATION: &str = "//Sender/";
 pub async fn connect(url: &str) -> Result<Api, Error> {
 	for i in 1..=MAX_ATTEMPTS {
 		debug!("Attempt #{}: Connecting to {}", i, url);
-		let promise = OnlineClient::<PolkadotConfig>::from_url(url);
-
-		match promise.await {
+		let rpc = WsClientBuilder::default()
+			.max_request_body_size(u32::MAX)
+			.max_concurrent_requests(u32::MAX as usize)
+			.build(url)
+			.await?;
+		let api = Api::from_rpc_client(Arc::new(rpc));
+		match api.await {
 			Ok(client) => {
 				debug!("Connection established to: {}", url);
 				return Ok(client);

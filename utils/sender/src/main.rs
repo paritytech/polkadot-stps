@@ -154,8 +154,10 @@ fn parallel_signing(
 			let receivers = generate_receivers(n_tx_sender, i);
 			let mut txs = Vec::new();
 			for j in 0..n_tx_sender {
+				debug!("Thread {}: preparing transaction {}", i, j);
 				let shift = i * n_tx_sender;
 				let signer = generate_signer(shift + j);
+				debug!("Thread {}: generated signer {}{}", i, DERIVATION, shift + j);
 				let tx_params = Params::new().era(Era::Immortal, genesis_hash);
 				let tx_payload = runtime::tx()
 					.balances()
@@ -182,10 +184,10 @@ async fn submit_txs(
 ) -> Result<(), Error> {
 	let mut maybe_submittables = Vec::new();
 	while let Some(signed_txs) = consumer.recv().await {
-		debug!("Received {} submittable transactions", signed_txs.len());
+		debug!("Consumer: received {} submittable transactions", signed_txs.len());
 		maybe_submittables.push(signed_txs);
 		if threads == maybe_submittables.len() {
-			debug!("Received all submittable transactions");
+			debug!("Consumer: received all submittable transactions, now starting submission");
 			let mut hashes = Vec::new();
 			for v in &maybe_submittables {
 				for chunk in v.chunks(chunk_size) {
@@ -201,6 +203,7 @@ async fn submit_txs(
 				}
 			}
 			try_join_all(hashes).await?;
+			info!("Sender submitted all transactions");
 		}
 	}
 	Ok(())
