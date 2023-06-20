@@ -7,6 +7,7 @@ use subxt::{
 	config::extrinsic_params::{BaseExtrinsicParamsBuilder as Params, Era},
 	tx::{PairSigner, SubmittableExtrinsic},
 	PolkadotConfig,
+	OnlineClient,
 };
 use utils::{connect, runtime, Api, Error, DERIVATION};
 
@@ -18,7 +19,7 @@ use pre::{parallel_pre_conditions, pre_conditions};
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-	/// Node URL
+	/// Node URL. Can be either a collator, or relaychain node based on whether you want to measure parachain TPS, or relaychain TPS.
 	#[arg(long)]
 	node_url: String,
 
@@ -26,7 +27,7 @@ struct Args {
 	#[arg(long, default_value_t = 1)]
 	threads: usize,
 
-	/// Set the sender index if you set threads to =< 1 and run multiple sender instances (as in the zombienet tests).
+	/// The sender index. Useful if you set threads to =< 1 and run multiple sender instances (as in the zombienet tests).
 	#[arg(long)]
 	sender_index: Option<usize>,
 
@@ -137,14 +138,7 @@ fn parallel_signing(
 	api: &Api,
 	threads: &usize,
 	n_tx_sender: usize,
-	producer: tokio::sync::mpsc::UnboundedSender<
-		Vec<
-			Result<
-				SubmittableExtrinsic<PolkadotConfig, subxt::OnlineClient<PolkadotConfig>>,
-				subxt::Error,
-			>,
-		>,
-	>,
+	producer: tokio::sync::mpsc::UnboundedSender<Vec<SubmittableExtrinsic<PolkadotConfig, OnlineClient<PolkadotConfig>>>>
 ) -> Result<(), Error> {
 	let ext_deposit_addr = runtime::constants().balances().existential_deposit();
 	let genesis_hash = api.genesis_hash();
@@ -170,8 +164,8 @@ fn parallel_signing(
 					.transfer_keep_alive(receivers[j as usize].clone().into(), ext_deposit);
 				let signed_tx =
 					match api.tx().create_signed_with_nonce(&tx_payload, &signer, 0, tx_params) {
-						Ok(signed) => Ok(signed),
-						Err(e) => Err(e),
+						Ok(signed) => signed,
+						Err(e) => panic!("Thread {}: failed to sign transaction due to: {}", i, e),
 					};
 				txs.push(signed_tx);
 			}
@@ -185,41 +179,29 @@ fn parallel_signing(
 	Ok(())
 }
 
-/// Here, the signed extrinsics are submitted.
-/// TODO: Optimise this
+/// Here the signed extrinsics are submitted.
 async fn submit_txs(
-	consumer: &mut tokio::sync::mpsc::UnboundedReceiver<
-		Vec<
-			Result<
-				SubmittableExtrinsic<PolkadotConfig, subxt::OnlineClient<PolkadotConfig>>,
-				subxt::Error,
-			>,
-		>,
-	>,
+	consumer: &mut tokio::sync::mpsc::UnboundedReceiver<Vec<SubmittableExtrinsic<PolkadotConfig, OnlineClient<PolkadotConfig>>>>,
 	chunk_size: usize,
 	threads: usize,
 ) -> Result<(), Error> {
-	let mut maybe_submittables = Vec::new();
+	let mut submittable_vecs = Vec::new();
 	while let Some(signed_txs) = consumer.recv().await {
 		debug!("Consumer: received {} submittable transactions", signed_txs.len());
-		maybe_submittables.push(signed_txs);
-		if threads == maybe_submittables.len() {
+		submittable_vecs.push(signed_txs);
+		if threads == submittable_vecs.len() {
 			debug!("Consumer: received all submittable transactions, now starting submission");
-			let mut hashes = Vec::new();
-			for v in &maybe_submittables {
-				for chunk in v.chunks(chunk_size) {
+			for vec in &submittable_vecs {
+				for chunk in vec.chunks(chunk_size) {
+					let mut hashes = Vec::new();
 					for signed_tx in chunk {
-						match signed_tx {
-							Ok(tx) => {
-								let hash = tx.submit();
-								hashes.push(hash);
-							},
-							Err(e) => panic!("Error: {:?}", e),
-						}
+						let hash = signed_tx.submit();
+						hashes.push(hash);
 					}
+					try_join_all(hashes).await?;
+					debug!("Sender submitted chunk with size: {}", chunk_size);
 				}
 			}
-			try_join_all(hashes).await?;
 			info!("Sender submitted all transactions");
 		}
 	}
