@@ -5,7 +5,7 @@ use subxt::{tx::PairSigner, utils::AccountId32, PolkadotConfig};
 use utils::{runtime, Api, Error, DERIVATION, connect};
 
 /// Check pre-conditions of accounts attributed to this sender
-pub async fn pre_conditions(node_url: &str, i: &usize, n: &usize) -> Result<(), Error> {
+pub async fn pre_conditions(api: &Api, i: &usize, n: &usize) -> Result<(), Error> {
 	info!(
 		"Sender {}: checking pre-conditions of accounts {}{} through {}{}",
 		i,
@@ -14,7 +14,6 @@ pub async fn pre_conditions(node_url: &str, i: &usize, n: &usize) -> Result<(), 
 		DERIVATION,
 		(i + 1) * n - 1
 	);
-	let api = connect(node_url).await?;
 	for j in i * n..(i + 1) * n {
 		let pair: SrPair =
 			Pair::from_string(format!("{}{}", DERIVATION, j).as_str(), None).unwrap();
@@ -24,6 +23,35 @@ pub async fn pre_conditions(node_url: &str, i: &usize, n: &usize) -> Result<(), 
 		check_account(&api, account).await?;
 	}
 	debug!("Sender {}: all pre-conditions checked and succeeded!", i);
+	Ok(())
+}
+
+/// Use JoinSet to run prechecks in a multi-threaded way.
+/// The pre_condition call is async because it fetches the chain state and hence is I/O bound.
+pub async fn parallel_pre_conditions(
+	api: &Api,
+	threads: &usize,
+	n_tx_sender: &usize,
+) -> Result<(), Error> {
+	let mut precheck_set = tokio::task::JoinSet::new();
+	for i in 0..*threads {
+		let api = api.clone();
+		let n_tx_sender = n_tx_sender.clone();
+		precheck_set.spawn(async move { 
+			match pre_conditions(&api, &i, &n_tx_sender).await {
+				Ok(_) => Ok(()),
+				Err(e) => Err(e)
+			}
+		});
+	}
+	while let Some(result) = precheck_set.join_next().await {
+		match result {
+			Ok(_) => (),
+			Err(e) => {
+				error!("Error: {:?}", e);
+			}
+		}
+	}
 	Ok(())
 }
 

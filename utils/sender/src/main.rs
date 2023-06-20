@@ -13,7 +13,7 @@ use utils::{connect, runtime, Api, Error, DERIVATION};
 
 mod pre;
 
-use pre::pre_conditions;
+use pre::{pre_conditions, parallel_pre_conditions};
 
 /// Util program to send transactions
 #[derive(Parser, Debug)]
@@ -23,11 +23,11 @@ struct Args {
 	#[arg(long)]
 	node_url: String,
 
-	/// EREW PRAM model is assumed, so the number of senders is equal to the number of threads.
+	/// EREW PRAM model is assumed where the number of senders is equal to the number of threads.
 	#[arg(long)]
 	threads: usize,
 
-	/// Sender index, optional: only set if you set threads to =< 1
+	/// Sender index, optional: only set if you set threads to =< 1 and run multiple sender instances (as in the zombienet tests).
 	#[arg(long)]
 	sender_index: Option<usize>,
 
@@ -45,18 +45,13 @@ struct Args {
 }
 
 async fn send_funds(
-	node_url: &str,
-	sender_index: &usize,
-	chunk_size: &usize,
-	n_tx_sender: &usize,
+	api: &Api,
+	sender_index: usize,
+	chunk_size: usize,
+	n_tx_sender: usize,
 ) -> Result<(), Error> {
-	let sender_index = *sender_index;
-	let n_tx_sender = *n_tx_sender;
-	let chunk_size = *chunk_size;
 	let receivers = generate_receivers(n_tx_sender, sender_index); // one receiver per tx
-
 	let ext_deposit_addr = runtime::constants().balances().existential_deposit();
-	let api = connect(node_url).await?;
 	let ext_deposit = api.constants().at(&ext_deposit_addr)?;
 
 	info!("Sender {}: signing {} transactions", sender_index, n_tx_sender);
@@ -136,6 +131,81 @@ fn generate_receivers(n: usize, sender_index: usize) -> Vec<sp_core::crypto::Acc
 	receivers
 }
 
+/// Parallel version of the send funds function, except that it does not send the transactions.
+/// Note that signing is a CPU bound task, and hence this cannot be async.
+/// As a consequence, we use spawn_blocking here and communicate with the main thread using an unbounded channel.
+fn parallel_signing(
+	api: &Api,
+	threads: &usize,
+	n_tx_sender: usize,
+	producer: tokio::sync::mpsc::UnboundedSender<Vec<Result<SubmittableExtrinsic<PolkadotConfig, subxt::OnlineClient<PolkadotConfig>>, subxt::Error>>>,
+) -> Result<(), Error> {
+	let ext_deposit_addr = runtime::constants().balances().existential_deposit();
+	let genesis_hash = api.genesis_hash();
+	let ext_deposit = api.constants().at(&ext_deposit_addr)?;
+
+	for i in 0..*threads {
+		let api = api.clone();
+		let producer = producer.clone();
+		tokio::task::spawn_blocking(move || {
+			debug!("Thread {}: preparing {} transactions", i, n_tx_sender);
+			let ext_deposit = ext_deposit.clone();
+			let genesis_hash = genesis_hash.clone();
+			let receivers = generate_receivers(n_tx_sender, i);
+			let mut txs = Vec::new();
+			for j in 0..n_tx_sender {
+				let shift = i * n_tx_sender;
+				let signer = generate_signer(shift + j);
+				let tx_params = Params::new().era(Era::Immortal, genesis_hash);
+				let tx_payload = runtime::tx()
+					.balances()
+					.transfer_keep_alive(receivers[j as usize].clone().into(), ext_deposit);
+				let signed_tx = match api.tx().create_signed_with_nonce(&tx_payload, &signer, 0, tx_params) {
+					Ok(signed) => Ok(signed),
+					Err(e) => Err(e)
+				};
+				txs.push(signed_tx);
+			}
+			producer.send(txs);
+			debug!("Thread {}: prepared and signed {} transactions", i, n_tx_sender);
+		});
+	}
+	Ok(())
+}
+
+/// Here, the signed extrinsics are submitted.
+/// TODO: Optimise this
+async fn submit_txs(
+	consumer: &mut tokio::sync::mpsc::UnboundedReceiver<Vec<Result<SubmittableExtrinsic<PolkadotConfig, subxt::OnlineClient<PolkadotConfig>>, subxt::Error>>>,
+	chunk_size: usize,
+	threads: usize,
+) -> Result<(), Error> {
+	let mut maybe_submittables = Vec::new();
+	while let Some(signed_txs) = consumer.recv().await {
+		debug!("Received {} submittable transactions", signed_txs.len());
+		maybe_submittables.push(signed_txs);
+		if threads == maybe_submittables.len() {
+			debug!("Received all submittable transactions");
+			let mut hashes = Vec::new();
+			for v in &maybe_submittables {
+				for chunk in v.chunks(chunk_size) {
+					for signed_tx in chunk {
+						match signed_tx {
+							Ok(tx) => {
+								let hash = tx.submit();
+								hashes.push(hash);
+							},
+							Err(e) => panic!("Error: {:?}", e)
+						}
+					}
+				}
+			}
+			try_join_all(hashes).await?;
+		}
+	}
+	Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Error> {
 	env_logger::init_from_env(
@@ -148,6 +218,7 @@ async fn main() -> Result<(), Error> {
 	let chunk_size = args.chunk_size;
 	
 	// This index is optional and only set when single-threaded mode is used.
+	// If it is not set, we default to 0.
 	let sender_index = match args.sender_index {
 		Some(i) => i,
 		None => 0
@@ -160,87 +231,27 @@ async fn main() -> Result<(), Error> {
 		None => args.num / threads
 	};
 
+	let api = connect(&node_url).await?;
+
 	match args.threads {
 		n if n > 1 => {
 			info!("Starting sender in parallel mode");
-			let mut precheck_set = tokio::task::JoinSet::new();
-			for i in 0..n {
-				let api_url = node_url.clone();
-				precheck_set.spawn(async move { 
-					match pre_conditions(&api_url, &i, &n_tx_sender).await {
-						Ok(_) => Ok(()),
-						Err(e) => Err(e)
-					}
-				});
-			}
-			while let Some(result) = precheck_set.join_next().await {
-				match result {
-					Ok(_) => (),
-					Err(e) => {
-						error!("Error: {:?}", e);
-					}
-				}
-			}
-
-			let ext_deposit_addr = runtime::constants().balances().existential_deposit();
-			let api = connect(&node_url).await?;
-			let genesis_hash = api.genesis_hash();
-			let ext_deposit = api.constants().at(&ext_deposit_addr)?;
 			let (producer, mut consumer) = tokio::sync::mpsc::unbounded_channel();
-			for i in 0..threads {
-				let api = api.clone();
-				let producer = producer.clone();
-				tokio::task::spawn_blocking(move || {
-					debug!("Thread {}: preparing {} transactions", i, n_tx_sender);
-					let ext_deposit = ext_deposit.clone();
-					let genesis_hash = genesis_hash.clone();
-					let receivers = generate_receivers(n_tx_sender, i);
-					let mut txs = Vec::new();
-					for j in 0..n_tx_sender {
-						let shift = i * n_tx_sender;
-						let signer = generate_signer(shift + j);
-						let tx_params = Params::new().era(Era::Immortal, genesis_hash);
-						let tx_payload = runtime::tx()
-							.balances()
-							.transfer_keep_alive(receivers[j as usize].clone().into(), ext_deposit);
-						let signed_tx = match api.tx().create_signed_with_nonce(&tx_payload, &signer, 0, tx_params) {
-							Ok(signed) => Ok(signed),
-							Err(e) => Err(e)
-						};
-						txs.push(signed_tx);
-					}
-					producer.send(txs);
-					debug!("Thread {}: prepared and signed {} transactions", i, n_tx_sender);
-				});
-			}
-
-			let mut maybe_submittables = Vec::new();
-			while let Some(signed_txs) = consumer.recv().await {
-				maybe_submittables.push(signed_txs);
-				if threads == maybe_submittables.len() {
-					let mut hashes = Vec::new();
-					for v in &maybe_submittables {
-						for chunk in v.chunks(chunk_size) {
-							for signed_tx in chunk {
-								match signed_tx {
-									Ok(tx) => {
-										let hash = tx.submit();
-										hashes.push(hash);
-									},
-									Err(e) => panic!("Error: {:?}", e)
-								}
-							}
-						}
-					}
-					try_join_all(hashes).await?;
-				}
-			}
+			parallel_pre_conditions(&api, &threads, &n_tx_sender).await?;
+			parallel_signing(&api, &threads, n_tx_sender, producer);
+			submit_txs(&mut consumer, chunk_size, threads).await?;
 		},
 		// Single-threaded mode
 		n if n == 1 => {
 			debug!("Starting sender in single-threaded mode");
-			pre_conditions(&node_url, &sender_index, &n_tx_sender).await?;
-			send_funds(&node_url, &sender_index, &chunk_size, &n_tx_sender).await?;
+			match args.sender_index {
+				Some(i) => {
+					let api = connect(&node_url).await?;
+					pre_conditions(&api, &sender_index, &n_tx_sender).await?;
+					send_funds(&api, sender_index, chunk_size, n_tx_sender).await?;
+				},
+				None => panic!("Must set sender index when running in single-threaded mode")
+			}
 		},
 		// Invalid number of threads
 		n if n < 1 => {
