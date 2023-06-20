@@ -23,11 +23,11 @@ struct Args {
 	#[arg(long)]
 	node_url: String,
 
-	/// EREW PRAM model is assumed where the number of senders is equal to the number of threads.
-	#[arg(long)]
+	/// Set to the number of desired threads (default: 1). If set > 1 the program will spawn multiple threads to send transactions in parallel.
+	#[arg(long, default_value_t = 1)]
 	threads: usize,
 
-	/// Sender index, optional: only set if you set threads to =< 1 and run multiple sender instances (as in the zombienet tests).
+	/// Set the sender index if you set threads to =< 1 and run multiple sender instances (as in the zombienet tests).
 	#[arg(long)]
 	sender_index: Option<usize>,
 
