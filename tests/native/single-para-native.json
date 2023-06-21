@@ -34,7 +34,7 @@
         "validator": true,
         "ws_port": 9945,
         "args": [
-          "--alice",
+          "--bob",
           "-lparachain=debug",
           "--pool-limit=1000000000",
           "--pool-kbytes=10000000000"
