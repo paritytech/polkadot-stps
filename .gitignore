@@ -1,5 +1,4 @@
 genesis-state
-genesis-wasm
 shell.nix
 zombienet-linux-x64
 polkadot

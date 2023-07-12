@@ -46,6 +46,7 @@
     {
       "id": 1000,
       "cumulus_based": true,
+      "genesis_wasm_path": "tests/genesis-wasm",
       "genesis": {
         "runtime": {
           "balances": {
