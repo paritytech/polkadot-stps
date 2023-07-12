@@ -1,8 +1,9 @@
-#!/bin/bash
+-#!/bin/bash
 
 set -e
 
 POLKADOT_V=v0.9.42
+CUMULUS_V=v0.9.430
 ZOMBIENET_V=v1.3.56
 CLUSTER_ID="gke_parity-zombienet_europe-west3-b_parity-zombienet"
 
@@ -12,6 +13,7 @@ print_help() {
   echo "$ ./polkadot-stps.sh init_native"
   echo "$ ./polkadot-stps.sh test_kubernetes tests/kubernetes/relay.zndsl"
   echo "$ ./polkadot-stps.sh test_native tests/native/relay-single-node-native.zndsl"
+  echo "$ ./polkadot-stps.sh test_native tests/native/single-para-native.zndsl"
 }
 
 fetch_zombienet() {
@@ -27,6 +29,14 @@ fetch_polkadot() {
     echo "fetching polkadot executable..."
     wget https://github.com/paritytech/polkadot/releases/download/$POLKADOT_V/polkadot
     chmod +x polkadot
+  fi
+}
+
+fetch_polkadot_parachain() {
+  if [ ! -s polkadot-parachain ]; then
+    echo "fetching polkadot-parachain executable..."
+    wget https://github.com/paritytech/cumulus/releases/download/$CUMULUS_V/polkadot-parachain
+    chmod +x polkadot-parachain
   fi
 }
 
@@ -88,6 +98,7 @@ stps_init_native() {
   fetch_polkadot
   install_polkadotjs
   fetch_zombienet
+  fetch_polkadot_parachain
 }
 
 subcommand=$1
