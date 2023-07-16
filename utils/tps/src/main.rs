@@ -100,13 +100,13 @@ async fn subscribe(
 					let descriptor = candidate_receipt.descriptor();
 					let parablock_para_id = descriptor.para_id;
 					if parablock_para_id.eq(&Id::new(para_id)) {
-						debug!(
+						info!(
 							"New ParaHead: {:?} for ParaId: {:?}",
 							descriptor.para_head, parablock_para_id
 						);
 						parablock_hash_sender.send(descriptor.para_head).await?;
 					} else {
-						debug!(
+						info!(
 							"New ParaHead: {:?} for ParaId: {:?} which we are not calculating (s)TPS for",
 							descriptor.para_head, parablock_para_id
 						);
@@ -117,7 +117,7 @@ async fn subscribe(
 		// If we received a signal to stop execution, break the loop
 		match signal_receiver.try_recv() {
 			Ok(_) => {
-				debug!("Worker stop signal received, now stopping execution!");
+				info!("Worker stop signal received, now stopping execution!");
 				break;
 			},
 			Err(err) => {
@@ -146,7 +146,7 @@ async fn calc_para_tps(
 	let mut tps_vec = Vec::new();
 
 	while let Some(para_head) = parablock_hash_receiver.recv().await {
-		debug!("Received ParaHead: {:?}", para_head);
+		info!("Received ParaHead: {:?}", para_head);
 		let parablock = para_api.blocks().at(para_head).await?;
 		let parabody = parablock.body().await?;
 		let parablock_hash = parablock.hash();
@@ -154,7 +154,7 @@ async fn calc_para_tps(
 
 		// Skip the first parablock as no way to calculate time-difference between it and non-existing block 0
 		if parablock_number == 1 {
-			debug!("Received Parablock number: {:?}, skipping accordingly.", parablock_number);
+			info!("Received Parablock number: {:?}, skipping accordingly.", parablock_number);
 			continue;
 		}
 
@@ -177,7 +177,7 @@ async fn calc_para_tps(
 					.await?
 					.unwrap();
 				let time_diff = parablock_timestamp - previous_parablock_timestamp;
-				debug!("Parablock time estimated at: {:?}ms", time_diff);
+				info!("Parablock time estimated at: {:?}ms", time_diff);
 				time_diff
 			},
 			None => {
@@ -188,7 +188,7 @@ async fn calc_para_tps(
 				Duration::as_secs_f64(&Duration::new(default_parablock_time, 0)) as u64
 			},
 		};
-		debug!("Checking extrinsics in parablock: {:?}", parablock_number);
+		info!("Checking extrinsics in parablock: {:?}", parablock_number);
 		for extrinsic in parabody.extrinsics().iter() {
 			let extrinsic = extrinsic?;
 			let events = extrinsic.events().await?;
@@ -201,13 +201,13 @@ async fn calc_para_tps(
 				}
 			}
 		}
-		debug!("Found {:?} transfers in parablock: {:?}", trx_in_parablock, parablock_number);
+		info!("Found {:?} transfers in parablock: {:?}", trx_in_parablock, parablock_number);
 		if trx_in_parablock > 0 {
 			let tps = trx_in_parablock as f32 / (parablock_time as f32 / 1000.0);
 			tps_vec.push(tps);
 			info!("TPS on parablock {}: {}", parablock_number, tps);
-			debug!("Total transactions processed: {}", total_count);
-			debug!("Remaining transactions to process: {}", expected_transactions - total_count);
+			info!("Total transactions processed: {}", total_count);
+			info!("Remaining transactions to process: {}", expected_transactions - total_count);
 		}
 
 		// Send metrics to prometheus, if enabled
@@ -224,7 +224,7 @@ async fn calc_para_tps(
 			info!("Average TPS is estimated as: {}", avg_tps);
 			match signal_sender.send(true) {
 				Ok(_) => {
-					debug!("Signaled to stop execution!");
+					info!("Signaled to stop execution!");
 				},
 				Err(_) => {
 					panic!("Failed to send signal to stop execution, exiting!");
@@ -380,7 +380,7 @@ async fn main() -> Result<(), Error> {
 			let (parablock_hash_sender, parablock_hash_receiver) = channel::<H256>(100);
 			let (signal_sender, signal_receiver) = oneshot_channel::<bool>();
 
-			debug!("Spawning async task to subscribe to parablocks!");
+			info!("Spawning async task to subscribe to parablocks!");
 			tokio::spawn(async move {
 				match subscribe(relay_api, para_id, signal_receiver, parablock_hash_sender).await {
 					Ok(_) => (),

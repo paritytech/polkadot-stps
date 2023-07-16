@@ -10,7 +10,7 @@ alice: parachain 1000 is registered within 60 seconds
 alice: parachain 1000 block height is at least 2 within 180 seconds
 
 # Sending the extrinsics
-stps: js-script ../utils.js with "send_balance_transfers,{{SENDERS}},5000,polkadot-parachain" within 300 seconds
+collator01: js-script ../utils.js with "send_balance_transfers,2,16390,polkadot-parachain" within 300 seconds
 
 # Start the TPS scraper on the validator, args: <cmd>, <num_senders>, <expected_trx>, <runtime>, <collator_to_send_to>, <para_id>
-alice: js-script ../utils.js with "calculate_tps,{{SENDERS}},5000,polkadot-parachain,1000,collator01" within 600 secs
+alice: js-script ../utils.js with "calculate_tps,2,16390,polkadot-parachain,1000,collator01" within 600 secs

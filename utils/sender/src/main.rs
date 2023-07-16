@@ -24,7 +24,7 @@ struct Args {
 	node_url: String,
 
 	/// Set to the number of desired threads (default: 1). If set > 1 the program will spawn multiple threads to send transactions in parallel.
-	#[arg(long, default_value_t = 1)]
+	#[arg(long, default_value_t = 8)]
 	threads: usize,
 
 	/// The sender index. Useful if you set threads to =< 1 and run multiple sender instances (as in the zombienet tests).

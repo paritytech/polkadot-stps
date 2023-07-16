@@ -21,7 +21,7 @@ async function run(nodeName, networkInfo, jsArgs) {
                 if (senderIndex) {
                     cargoArgs = ['r', '--quiet', '--release', '--manifest-path', 'utils/sender/Cargo.toml', '--features', relayOrPara, '--', '--node-url', wsUri, '--sender-index', senderIndex, '--total-senders', totalSenders, '--num', totalTx];
                 } else {
-                    cargoArgs = ['r', '--quiet', '--release', '--manifest-path', 'utils/sender/Cargo.toml', '--features', relayOrPara, '--', '--node-url', wsUri, '--sender-index', 0, '--total-senders', totalSenders, '--num', totalTx];
+                    cargoArgs = ['r', '--quiet', '--release', '--manifest-path', 'utils/sender/Cargo.toml', '--features', relayOrPara, '--', '--node-url', wsUri, '--sender-index', 0, '--num', totalTx, '--threads', totalSenders];
                 }
                 break;
             case "calculate_tps":
