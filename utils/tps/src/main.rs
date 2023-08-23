@@ -59,7 +59,7 @@ struct Args {
 
 	/// Default parablock time set to 12s for sync-backing.
 	/// This should be set to 6.0s for async-backing.
-	#[arg(short, long, default_value_t = 12)]
+	#[arg(short, long, default_value_t = 6)]
 	default_parablock_time: u64,
 
 	/// Whether to export metrics to prometheus
