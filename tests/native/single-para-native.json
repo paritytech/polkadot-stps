@@ -9,9 +9,13 @@
     "genesis": {
       "runtime": {
         "runtime_genesis_config": {
-          "configuration": {
-            "config": {
-              "max_pov_size": 5242880
+            "configuration": {
+              "config": {
+	        "max_pov_size": 5242880,
+		"async_backing_params": {
+	          "max_candidate_depth": 3,
+	          "allowed_ancestry_len": 2
+              }
             }
           }
         }
@@ -61,8 +65,8 @@
         "args": [
             "-lparachain=debug",
 	    "-lbasic-authorship=debug",
-          "--pool-limit=1000000000",
-          "--pool-kbytes=10000000000"
+            "--pool-limit=1000000000",
+            "--pool-kbytes=10000000000"
         ]
       },
       "collator_groups": [
