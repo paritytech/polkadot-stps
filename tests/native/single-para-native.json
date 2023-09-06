@@ -7,11 +7,12 @@
     "chain": "rococo-local",
     "default_command": "polkadot",
     "genesis": {
-      "runtime": {
+    "runtime": {
+	"session_length_in_blocks": 15,
         "runtime_genesis_config": {
             "configuration": {
               "config": {
-	        "max_pov_size": 5242880,
+	        "scheduling_lookahead": 2,
 		"async_backing_params": {
 	          "max_candidate_depth": 3,
 	          "allowed_ancestry_len": 2
