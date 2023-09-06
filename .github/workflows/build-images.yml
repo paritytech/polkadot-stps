@@ -10,7 +10,7 @@ jobs:
     name:                         Build and push funder image
     runs-on:                      ubuntu-latest
     steps:
-    - uses:                       actions/checkout@v3
+    - uses:                       actions/checkout@v4
     - name:                       Build Image
       uses:                       redhat-actions/buildah-build@v2
       with:
@@ -40,7 +40,7 @@ jobs:
     name:                         Build and push sender (tick) image
     runs-on:                      ubuntu-latest
     steps:
-    - uses:                       actions/checkout@v3
+    - uses:                       actions/checkout@v4
     - name:                       Build Image
       uses:                       redhat-actions/buildah-build@v2
       with:
@@ -71,7 +71,7 @@ jobs:
     name:                         Build and push tps (tick) image
     runs-on:                      ubuntu-latest
     steps:
-    - uses:                       actions/checkout@v3
+    - uses:                       actions/checkout@v4
     - name:                       Build Image
       uses:                       redhat-actions/buildah-build@v2
       with:
@@ -102,7 +102,7 @@ jobs:
     name:                         Build and push sender (versi-tick) image
     runs-on:                      ubuntu-latest
     steps:
-    - uses:                       actions/checkout@v3
+    - uses:                       actions/checkout@v4
     - name:                       Build Image
       uses:                       redhat-actions/buildah-build@v2
       with:
@@ -133,7 +133,7 @@ jobs:
     name:                         Build and push sender (versi-relay) image
     runs-on:                      ubuntu-latest
     steps:
-    - uses:                       actions/checkout@v3
+    - uses:                       actions/checkout@v4
     - name:                       Build Image
       uses:                       redhat-actions/buildah-build@v2
       with:
@@ -164,7 +164,7 @@ jobs:
     name:                         Build and push tps (versi-relay) image
     runs-on:                      ubuntu-latest
     steps:
-    - uses:                       actions/checkout@v3
+    - uses:                       actions/checkout@v4
     - name:                       Build Image
       uses:                       redhat-actions/buildah-build@v2
       with:
@@ -195,7 +195,7 @@ jobs:
     name:                         Build and push tps (versi-tick) image
     runs-on:                      ubuntu-latest
     steps:
-    - uses:                       actions/checkout@v3
+    - uses:                       actions/checkout@v4
     - name:                       Build Image
       uses:                       redhat-actions/buildah-build@v2
       with:
@@ -226,7 +226,7 @@ jobs:
     name:                         Build and push sender (rococo) image
     runs-on:                      ubuntu-latest
     steps:
-    - uses:                       actions/checkout@v3
+    - uses:                       actions/checkout@v4
     - name:                       Build Image
       uses:                       redhat-actions/buildah-build@v2
       with:
@@ -257,7 +257,7 @@ jobs:
     name:                         Build and push tps (rococo) image
     runs-on:                      ubuntu-latest
     steps:
-    - uses:                       actions/checkout@v3
+    - uses:                       actions/checkout@v4
     - name:                       Build Image
       uses:                       redhat-actions/buildah-build@v2
       with:
