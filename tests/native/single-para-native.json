@@ -7,8 +7,8 @@
     "chain": "rococo-local",
     "default_command": "polkadot",
     "genesis": {
-      "runtime": {
-        "runtime_genesis_config": {
+      "runtimeGenesis": {
+        "patch": {
           "configuration": {
             "config": {
               "max_pov_size": 5242880
@@ -47,9 +47,11 @@
       "id": 1000,
       "cumulus_based": true,
       "genesis": {
-        "runtime": {
-          "balances": {
-            "balances": {% include "../funded-accounts.json" %}
+        "runtimeGenesis": {
+          "patch": {
+            "balances": {
+              "balances": {% include "../funded-accounts.json" %}
+            }
           }
         }
       },

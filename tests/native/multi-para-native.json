@@ -34,9 +34,11 @@
         "id": 1000,
         "cumulus_based": true,
         "genesis": {
-          "runtime": {
-            "balances": {
-              "balances": {% include "../funded-accounts.json" %}
+          "runtimeGenesis": {
+            "patch": {
+              "balances": {
+                "balances": {% include "../funded-accounts.json" %}
+              }
             }
           }
         },
@@ -55,9 +57,11 @@
         "id": 1001,
         "cumulus_based": true,
         "genesis": {
-          "runtime": {
-            "balances": {
-              "balances": {% include "../funded-accounts.json" %}
+          "runtimeGenesis": {
+            "patch": {
+              "balances": {
+                "balances": {% include "../funded-accounts.json" %}
+              }
             }
           }
         },
