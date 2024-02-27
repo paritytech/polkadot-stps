@@ -16,6 +16,8 @@ clap = { version = "4.3.0", features = ["derive"] }
 tokio = { version = "1.28.2", features = ["rt-multi-thread", "macros", "time"] }
 codec = { package = "parity-scale-codec", version = "3.5.0", default-features = false, features = ["derive", "full", "bit-vec"] }
 futures = "0.3.28"
+frame-system = "30.0.0"
+pallet-balances = "30.0.0"
 
 [lib]
 name = "sender_lib"

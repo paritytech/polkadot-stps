@@ -1,8 +1,9 @@
+use codec::Decode;
 use log::*;
 use sp_core::{sr25519::Pair as SrPair, Pair};
 use subxt::{tx::PairSigner, utils::AccountId32, PolkadotConfig};
 
-use utils::{runtime, Api, Error, DERIVATION};
+use utils::{Api, Error, DERIVATION};
 
 /// Check pre-conditions of accounts attributed to this sender
 pub async fn pre_conditions(api: &Api, i: &usize, n: &usize) -> Result<(), Error> {
@@ -55,24 +56,35 @@ pub async fn parallel_pre_conditions(
 	Ok(())
 }
 
+// FIXME: This assumes that all the chains supported by sTPS use this `AccountInfo` type. Currently
+// it holds. However, to benchmark a chain with another `AccountInfo` structure, a mechanism to
+// adjust this type info should be provided.
+type AccountInfo = frame_system::AccountInfo<u32, pallet_balances::AccountData<u128>>;
+
 /// Check account nonce and free balance
 async fn check_account(api: &Api, account: &AccountId32) -> Result<(), Error> {
-	let ext_deposit_addr = runtime::constants().balances().existential_deposit();
-	let ext_deposit = api.constants().at(&ext_deposit_addr)?;
-	let account_state_storage_addr = runtime::storage().system().account(account);
+	let ext_deposit_query = subxt::dynamic::constant("Balances", "ExistentialDeposit");
+	let ext_deposit = api
+		.constants()
+		.at(&ext_deposit_query)?
+		.to_value()?
+		.as_u128()
+		.expect("Only u128 deposits are supported");
+	let account_state_storage_addr = subxt::dynamic::storage("System", "Account", vec![account]);
 	let finalized_head_hash = api.rpc().finalized_head().await?;
-	let account_state = api
+	let account_state_encoded = api
 		.storage()
 		.at(finalized_head_hash)
-		.fetch(&account_state_storage_addr)
+		.fetch_or_default(&account_state_storage_addr)
 		.await?
-		.unwrap();
+		.into_encoded();
+	let account_state: AccountInfo = Decode::decode(&mut &account_state_encoded[..])?;
 
 	if account_state.nonce != 0 {
 		panic!("Account has non-zero nonce");
 	}
 
-	if (account_state.data.free as f32) < ext_deposit as f32 * 1.1
+	if (account_state.data.free as f64) < ext_deposit as f64 * 1.1
 	/* 10% for fees */
 	{
 		// 10% for fees
