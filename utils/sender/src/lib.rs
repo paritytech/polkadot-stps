@@ -1,82 +1,16 @@
 use codec::Decode;
 use futures::future::try_join_all;
 use log::*;
-use sp_core::{sr25519::Pair as SrPair, Pair};
+use sp_core::{sr25519::Pair as SrPair, ByteArray, Pair};
 use subxt::{
 	config::extrinsic_params::{BaseExtrinsicParamsBuilder as Params, Era},
+	dynamic::Value,
 	tx::{PairSigner, SubmittableExtrinsic},
-	PolkadotConfig,
-	OnlineClient,
+	OnlineClient, PolkadotConfig,
 };
-use utils::{runtime, Api, Error, DERIVATION};
+use utils::{Api, Error, DERIVATION};
 
 mod pre;
-
-pub async fn send_funds(
-	api: &Api,
-	sender_index: usize,
-	chunk_size: usize,
-	n_tx_sender: usize,
-) -> Result<(), Error> {
-	let receivers = generate_receivers(n_tx_sender, sender_index); // one receiver per tx
-	let ext_deposit_addr = runtime::constants().balances().existential_deposit();
-	let ext_deposit = api.constants().at(&ext_deposit_addr)?;
-
-	info!("Sender {}: signing {} transactions", sender_index, n_tx_sender);
-	let mut txs = Vec::new();
-	for i in 0..n_tx_sender {
-		let shift = sender_index * n_tx_sender;
-		let signer = generate_signer(shift + i);
-		let tx_params = Params::new().era(Era::Immortal, api.genesis_hash());
-		let unsigned_tx = runtime::tx()
-			.balances()
-			.transfer_keep_alive(receivers[i as usize].clone().into(), ext_deposit);
-		let signed_tx = api.tx().create_signed_with_nonce(&unsigned_tx, &signer, 0, tx_params)?;
-		txs.push(signed_tx);
-	}
-
-	info!(
-		"Sender {}: sending {} transactions in chunks of {}",
-		sender_index, n_tx_sender, chunk_size
-	);
-	let mut last_now = std::time::Instant::now();
-	let mut last_sent = 0;
-	let start = std::time::Instant::now();
-
-	for (i, chunk) in txs.chunks(chunk_size).enumerate() {
-		let mut hashes = Vec::new();
-		for tx in chunk {
-			let hash = tx.submit();
-			hashes.push(hash);
-		}
-		try_join_all(hashes).await?;
-
-		let elapsed = last_now.elapsed();
-		if elapsed >= std::time::Duration::from_secs(1) {
-			let sent = i * chunk_size - last_sent;
-			let rate = sent as f64 / elapsed.as_secs_f64();
-			info!(
-				"Sender {}: {} txs sent in {} ms ({:.2} /s)",
-				sender_index,
-				sent,
-				elapsed.as_millis(),
-				rate
-			);
-			last_now = std::time::Instant::now();
-			last_sent = i * chunk_size;
-		}
-	}
-	let rate = n_tx_sender as f64 / start.elapsed().as_secs_f64();
-	info!(
-		"Sender {}: {} txs sent in {} ms ({:.2} /s)",
-		sender_index,
-		n_tx_sender,
-		start.elapsed().as_millis(),
-		rate
-	);
-
-	Ok(())
-}
 
 /// Generates a signer from a given index.
 pub fn generate_signer(i: usize) -> PairSigner<PolkadotConfig, SrPair> {
@@ -104,15 +38,18 @@ pub fn generate_receivers(n: usize, sender_index: usize) -> Vec<sp_core::crypto:
 /// As a consequence, we use spawn_blocking here and communicate with the main thread using an unbounded channel.
 pub fn parallel_signing(
 	api: &Api,
-	threads: &usize,
+	threads: usize,
 	n_tx_sender: usize,
-	producer: tokio::sync::mpsc::UnboundedSender<Vec<SubmittableExtrinsic<PolkadotConfig, OnlineClient<PolkadotConfig>>>>
+	producer: tokio::sync::mpsc::UnboundedSender<
+		Vec<SubmittableExtrinsic<PolkadotConfig, OnlineClient<PolkadotConfig>>>,
+	>,
 ) -> Result<(), Error> {
-	let ext_deposit_addr = runtime::constants().balances().existential_deposit();
 	let genesis_hash = api.genesis_hash();
-	let ext_deposit = api.constants().at(&ext_deposit_addr)?;
+	let ext_deposit_query = subxt::dynamic::constant("Balances", "ExistentialDeposit");
+	let ext_deposit =
+		u128::decode(&mut &api.constants().at(&ext_deposit_query)?.into_encoded()[..])?;
 
-	for i in 0..*threads {
+	for i in 0..threads {
 		let api = api.clone();
 		let producer = producer.clone();
 		tokio::task::spawn_blocking(move || {
@@ -127,11 +64,16 @@ pub fn parallel_signing(
 				let signer = generate_signer(shift + j);
 				debug!("Thread {}: generated signer {}{}", i, DERIVATION, shift + j);
 				let tx_params = Params::new().era(Era::Immortal, genesis_hash);
-				let tx_payload = runtime::tx()
-					.balances()
-					.transfer_keep_alive(receivers[j as usize].clone().into(), ext_deposit);
+				let tx_call = subxt::dynamic::tx(
+					"Balances",
+					"transfer_keep_alive",
+					vec![
+						Value::unnamed_variant("Id", [Value::from_bytes(receivers[j].as_slice())]),
+						Value::u128(ext_deposit),
+					],
+				);
 				let signed_tx =
-					match api.tx().create_signed_with_nonce(&tx_payload, &signer, 0, tx_params) {
+					match api.tx().create_signed_with_nonce(&tx_call, &signer, 0, tx_params) {
 						Ok(signed) => signed,
 						Err(e) => panic!("Thread {}: failed to sign transaction due to: {}", i, e),
 					};
@@ -149,7 +91,9 @@ pub fn parallel_signing(
 
 /// Here the signed extrinsics are submitted.
 pub async fn submit_txs(
-	consumer: &mut tokio::sync::mpsc::UnboundedReceiver<Vec<SubmittableExtrinsic<PolkadotConfig, OnlineClient<PolkadotConfig>>>>,
+	consumer: &mut tokio::sync::mpsc::UnboundedReceiver<
+		Vec<SubmittableExtrinsic<PolkadotConfig, OnlineClient<PolkadotConfig>>>,
+	>,
 	chunk_size: usize,
 	threads: usize,
 ) -> Result<(), Error> {

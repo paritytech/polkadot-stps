@@ -36,35 +36,32 @@ async fn main() -> Result<(), Error> {
 	);
 
 	let args = Args::parse();
-	let node_url = args.node_url;
-	let threads = args.threads;
-	let chunk_size = args.chunk_size;
+
+	if args.threads < 1 {
+		panic!("Number of threads must be 1, or greater!")
+	}
 
 	// In case the optional total_senders argument is not passed for single-threaded mode,
 	// we must make sure that we split the work evenly between threads for multi-threaded mode.
 	let n_tx_sender = match args.total_senders {
 		Some(tot_s) => args.num / tot_s,
-		None => args.num / threads,
+		None => args.num / args.threads,
 	};
 
 	// Create the client here, so that we can use it in the various functions.
-	let api = connect(&node_url).await?;
+	let api = connect(&args.node_url).await?;
 
-	match args.threads {
-		n if n >= 1 => {
-			info!("Starting sender in parallel mode");
-			let (producer, mut consumer) = tokio::sync::mpsc::unbounded_channel();
-			// I/O Bound
-			pre::parallel_pre_conditions(&api, &threads, &n_tx_sender).await?;
-			// CPU Bound
-			match sender_lib::parallel_signing(&api, threads, n_tx_sender, producer) {
-				Ok(_) => (),
-				Err(e) => panic!("Error: {:?}", e),
-			}
-			// I/O Bound
-			sender_lib::submit_txs(&mut consumer, chunk_size, threads).await?;
-		},
-		_ => panic!("Number of threads must be 1, or greater!"),
+	info!("Starting sender in parallel mode");
+	let (producer, mut consumer) = tokio::sync::mpsc::unbounded_channel();
+	// I/O Bound
+	pre::parallel_pre_conditions(&api, args.threads, n_tx_sender).await?;
+	// CPU Bound
+	match sender_lib::parallel_signing(&api, args.threads, n_tx_sender, producer) {
+		Ok(_) => (),
+		Err(e) => panic!("Error: {:?}", e),
 	}
+	// I/O Bound
+	sender_lib::submit_txs(&mut consumer, args.chunk_size, args.threads).await?;
+
 	Ok(())
 }

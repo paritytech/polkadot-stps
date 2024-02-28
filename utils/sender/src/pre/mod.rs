@@ -31,11 +31,11 @@ pub async fn pre_conditions(api: &Api, i: &usize, n: &usize) -> Result<(), Error
 /// The pre_condition call is async because it fetches the chain state and hence is I/O bound.
 pub async fn parallel_pre_conditions(
 	api: &Api,
-	threads: &usize,
-	n_tx_sender: &usize,
+	threads: usize,
+	n_tx_sender: usize,
 ) -> Result<(), Error> {
 	let mut precheck_set = tokio::task::JoinSet::new();
-	for i in 0..*threads {
+	for i in 0..threads {
 		let api = api.clone();
 		let n_tx_sender = n_tx_sender.clone();
 		precheck_set.spawn(async move {
@@ -56,8 +56,8 @@ pub async fn parallel_pre_conditions(
 	Ok(())
 }
 
-// FIXME: This assumes that all the chains supported by sTPS use this `AccountInfo` type. Currently
-// it holds. However, to benchmark a chain with another `AccountInfo` structure, a mechanism to
+// FIXME: This assumes that all the chains supported by sTPS use this `AccountInfo` type. Currently,
+// that holds. However, to benchmark a chain with another `AccountInfo` structure, a mechanism to
 // adjust this type info should be provided.
 type AccountInfo = frame_system::AccountInfo<u32, pallet_balances::AccountData<u128>>;
 
@@ -75,8 +75,9 @@ async fn check_account(api: &Api, account: &AccountId32) -> Result<(), Error> {
 	let account_state_encoded = api
 		.storage()
 		.at(finalized_head_hash)
-		.fetch_or_default(&account_state_storage_addr)
+		.fetch(&account_state_storage_addr)
 		.await?
+		.expect("Existantial deposit is set")
 		.into_encoded();
 	let account_state: AccountInfo = Decode::decode(&mut &account_state_encoded[..])?;
 
