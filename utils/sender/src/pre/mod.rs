@@ -1,6 +1,7 @@
 use codec::Decode;
 use log::*;
-use sp_core::{sr25519::Pair as SrPair, Pair};
+use subxt::client::OfflineClientT;
+use subxt::ext::sp_core::{sr25519::Pair as SrPair, Pair};
 use subxt::{tx::PairSigner, utils::AccountId32, PolkadotConfig};
 
 use utils::{Api, Error, DERIVATION};
@@ -71,7 +72,8 @@ async fn check_account(api: &Api, account: &AccountId32) -> Result<(), Error> {
 		.as_u128()
 		.expect("Only u128 deposits are supported");
 	let account_state_storage_addr = subxt::dynamic::storage("System", "Account", vec![account]);
-	let finalized_head_hash = api.rpc().finalized_head().await?;
+	let finalized_head_hash = api.backend().latest_finalized_block_ref().await?.hash();
+	// let finalized_head_hash = api.rpc().finalized_head().await?;
 	let account_state_encoded = api
 		.storage()
 		.at(finalized_head_hash)

@@ -12,9 +12,9 @@ sp-runtime = "24.0.0"
 sp-core = { version = "21.0.0", default-features = false  }
 tokio = { version = "1.28.2", features = ["rt-multi-thread", "macros", "time"] }
 parity-scale-codec  = { version = "3.5.0", default-features = false, features = ["derive", "full", "bit-vec"] }
-subxt = "0.29.0"
+subxt = "0.33.0"
 log = "0.4.18"
-jsonrpsee = { version = "0.16", features = ["jsonrpsee-ws-client"] }
+jsonrpsee = { version = "0.20.3", features = ["jsonrpsee-ws-client"] }
 
 [features]
 rococo = []

@@ -1,11 +1,15 @@
+use sp_core::ByteArray;
+use subxt::tx::PairSigner;
+use subxt::utils::Era;
 use codec::Decode;
 use futures::future::try_join_all;
 use log::*;
-use sp_core::{sr25519::Pair as SrPair, ByteArray, Pair};
+use subxt::ext::sp_core::{sr25519::Pair as SrPair, Pair};
 use subxt::{
-	config::extrinsic_params::{BaseExtrinsicParamsBuilder as Params, Era},
+	config::SubstrateExtrinsicParamsBuilder as Params,
+	// config::extrinsic_params::{BaseExtrinsicParamsBuilder as Params, Era},
 	dynamic::Value,
-	tx::{PairSigner, SubmittableExtrinsic},
+	tx::SubmittableExtrinsic,
 	OnlineClient, PolkadotConfig,
 };
 use utils::{Api, Error, DERIVATION};
@@ -63,7 +67,7 @@ pub fn parallel_signing(
 				let shift = i * n_tx_sender;
 				let signer = generate_signer(shift + j);
 				debug!("Thread {}: generated signer {}{}", i, DERIVATION, shift + j);
-				let tx_params = Params::new().era(Era::Immortal, genesis_hash);
+				let tx_params = Params::new().build();
 				let tx_call = subxt::dynamic::tx(
 					"Balances",
 					"transfer_keep_alive",

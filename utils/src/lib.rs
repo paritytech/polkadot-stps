@@ -1,8 +1,7 @@
-use log::{error, debug, warn};
-use std::time::Duration;
-use subxt::{OnlineClient, PolkadotConfig};
 use jsonrpsee::ws_client::WsClientBuilder;
-use std::sync::Arc;
+use log::{debug, error, warn};
+use std::{sync::Arc, time::Duration};
+use subxt::{OnlineClient, PolkadotConfig};
 
 #[cfg(feature = "polkadot-parachain")]
 #[subxt::subxt(runtime_metadata_path = "metadata/polkadot-parachain.scale")]
@@ -12,7 +11,7 @@ pub mod runtime {}
 #[subxt::subxt(runtime_metadata_path = "metadata/tick-meta.scale")]
 pub mod runtime {}
 
-#[cfg(feature = "rococo")]
+// #[cfg(feature = "rococo")]
 #[subxt::subxt(runtime_metadata_path = "metadata/rococo-meta.scale")]
 pub mod runtime {}
 
@@ -40,12 +39,13 @@ pub const DERIVATION: &str = "//Sender/";
 pub async fn connect(url: &str) -> Result<Api, Error> {
 	for i in 1..=MAX_ATTEMPTS {
 		debug!("Attempt #{}: Connecting to {}", i, url);
-		let rpc = WsClientBuilder::default()
-			.max_request_body_size(u32::MAX)
-			.max_concurrent_requests(u32::MAX as usize)
-			.build(url)
-			.await?;
-		let api = Api::from_rpc_client(Arc::new(rpc));
+		// let rpc = WsClientBuilder::default()
+		// 	.max_request_body_size(u32::MAX)
+		// 	.max_concurrent_requests(u32::MAX as usize)
+		// 	.build(url)
+		// 	.await?;
+		// let api = Api::from_rpc_client(Arc::new(rpc));
+		let api = Api::from_url(url);
 		match api.await {
 			Ok(client) => {
 				debug!("Connection established to: {}", url);

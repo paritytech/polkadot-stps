@@ -4,13 +4,15 @@ use log::*;
 use parity_scale_codec::Decode;
 use polkadot_primitives::{CandidateReceipt, Hash, Id};
 use subxt::utils::H256;
-use tokio::sync::{
-	mpsc::{channel, Receiver, Sender},
-	oneshot::Sender as OneshotSender,
-	oneshot::Receiver as OneshotReceiver,
-	oneshot::channel as oneshot_channel,
+use tokio::{
+	sync::{
+		mpsc::{channel, Receiver, Sender},
+		oneshot::{
+			channel as oneshot_channel, Receiver as OneshotReceiver, Sender as OneshotSender,
+		},
+	},
+	time::Duration,
 };
-use tokio::time::Duration;
 use utils::{connect, runtime, Api, Error};
 
 mod prometheus;
@@ -384,10 +386,18 @@ async fn main() -> Result<(), Error> {
 			tokio::spawn(async move {
 				match subscribe(relay_api, para_id, signal_receiver, parablock_hash_sender).await {
 					Ok(_) => (),
-					Err(err) => panic!("Error! {:?}", err)
+					Err(err) => panic!("Error! {:?}", err),
 				}
 			});
-			calc_para_tps(para_api, parablock_hash_receiver, signal_sender, default_parablock_time, expected_transactions, prometheus_metrics).await?;
+			calc_para_tps(
+				para_api,
+				parablock_hash_receiver,
+				signal_sender,
+				default_parablock_time,
+				expected_transactions,
+				prometheus_metrics,
+			)
+			.await?;
 		},
 		false => {
 			let node_url = match args.node_url {
