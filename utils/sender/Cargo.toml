@@ -6,18 +6,16 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-utils = { path = ".." }
+funder = { path = "../funder" }
 log = "0.4.16"
 env_logger = "0.10.0"
-sp-core = { version = "21.0.0", default-features = false  }
-sp-runtime = "24.0.0"
 subxt = { version = "0.33.0", features = ["substrate-compat"] }
 clap = { version = "4.3.0", features = ["derive"] }
 tokio = { version = "1.28.2", features = ["rt-multi-thread", "macros", "time"] }
 codec = { package = "parity-scale-codec", version = "3.5.0", default-features = false, features = ["derive", "full", "bit-vec"] }
 futures = "0.3.28"
-frame-system = "30.0.0"
-pallet-balances = "30.0.0"
+frame-system.workspace = true
+pallet-balances.workspace = true
 
 [lib]
 name = "sender_lib"
@@ -26,10 +24,3 @@ path = "src/lib.rs"
 [[bin]]
 name = "sender"
 path = "src/main.rs"
-
-[features]
-tick = ["utils/tick"]
-polkadot-parachain = ["utils/polkadot-parachain"]
-rococo = ["utils/rococo"]
-versi-tick = ["utils/versi-tick"]
-versi-relay = ["utils/versi-relay"]
