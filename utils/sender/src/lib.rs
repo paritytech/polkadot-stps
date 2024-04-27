@@ -60,7 +60,7 @@ pub fn sign_txs(
 				.into_iter()
 				.map(move |(sender, receiver)| {
 					let signer = PairSigner::new(sender);
-					let tx_params = Params::new().build();
+					let tx_params = Params::new().nonce(0).build();
 					let tx_call = subxt::dynamic::tx(
 						"Balances",
 						"transfer_keep_alive",
@@ -69,7 +69,7 @@ pub fn sign_txs(
 							Value::u128(ext_deposit),
 						],
 					);
-					api.tx().create_signed_with_nonce(&tx_call, &signer, 0, tx_params)
+					api.tx().create_signed_offline(&tx_call, &signer, tx_params)
 				})
 				.collect::<Vec<_>>()
 		}));
@@ -89,8 +89,19 @@ pub async fn submit_txs(
 ) -> Result<(), Box<dyn Error>> {
 	for chunk in txs.chunks(chunk_size) {
 		let futs = chunk.iter().map(|tx| tx.submit()).collect::<FuturesUnordered<_>>();
-		let _ = futs.collect::<Vec<_>>().await;
+		let res = futs.collect::<Vec<_>>().await;
+		for r in res {
+			if let Err(e) = r {
+				warn!("Error sending transaction: {:?}", e);
+			}
+		}
 		debug!("Sender submitted chunk with size: {}", chunk_size);
+		// for t in chunk.iter() {
+		// 	let res = t.submit().await;
+		// 	if let Err(e) = res {
+		// 		warn!("Error sending transaction: {:?}", e);
+		// 	}
+		// }
 	}
 	Ok(())
 }

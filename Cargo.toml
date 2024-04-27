@@ -15,8 +15,9 @@ members = [
 default-members = ["stps"]
 
 [workspace.dependencies]
-sp-core = "29.0.0"
+sp-core = "31.0.0"
 sp-runtime = "32.0.0"
 sp-keyring = "32.0.0"
-frame-system = "29.0.0"
-pallet-balances = "29.0.0"
+subxt = { version = "0.35.3", features = ["substrate-compat"] }
+frame-system = "31.0.0"
+pallet-balances = "31.0.0"

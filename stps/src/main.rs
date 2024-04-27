@@ -1,9 +1,9 @@
 use clap::Parser;
 use parity_scale_codec::{Compact, Decode};
 use serde_json::json;
-use std::{error::Error, time::Duration};
+use std::{cmp::max, error::Error, time::Duration};
 use subxt::{
-	ext::sp_core::{crypto::Ss58Codec, Pair},
+	ext::sp_core::{crypto::Ss58Codec, sr25519::Pair, crypto::Pair as _},
 	OnlineClient, PolkadotConfig,
 };
 use zombienet_sdk::{NetworkConfigBuilder, NetworkConfigExt, NetworkNode, RegistrationStrategy};
@@ -81,6 +81,10 @@ struct Args {
 	#[arg(long, default_value = "polkadot-parachain")]
 	para_bin: String,
 
+	/// Args for parachain collator binary.
+	#[arg(long)]
+	para_args: Option<String>,
+
 	/// Number of collators
 	#[arg(long, default_value_t = 1_usize)]
 	para_nodes: usize,
@@ -155,6 +159,8 @@ async fn block_subscriber(
 	let mut total_blocktime = 0;
 	let mut total_ntrans = 0;
 	let mut _first_tran_timestamp = 0;
+	let mut max_trans = 0;
+	let mut max_tps = 0.0;
 	log::debug!("Starting chain watcher");
 	while let Some(block) = blocks_sub.next().await {
 		let block = block?;
@@ -181,18 +187,24 @@ async fn block_subscriber(
 		}
 
 		if last_block_ntrans > 0 {
+			log::debug!("Last block time {last_blocktime}, {last_block_ntrans} transactions in block");
 			total_blocktime += last_blocktime;
 			total_ntrans += last_block_ntrans;
+			max_trans = max(max_trans, last_block_ntrans);
 			let block_tps = last_block_ntrans as f64 / (last_blocktime as f64 / 1_000_f64);
+			max_tps = f64::max(max_tps, block_tps);
 			log::info!("TPS in block: {:?}", block_tps);
 			log::info!(
 				"TPS average: {}",
 				total_ntrans as f64 / (total_blocktime as f64 / 1_000_f64)
 			);
+			log::info!("Max TPS: {max_tps}, max transactions per block {max_trans}");
 			if let Some(ref metrics) = metrics {
 				metrics.set(last_block_ntrans, last_blocktime, block.number());
 			}
 		}
+
+		log::info!("Total transactions processed: {total_ntrans}");
 
 		if total_ntrans >= ntrans as u64 {
 			break;
@@ -282,6 +294,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
 			} else {
 				p
 			};
+
+			let p = if let Some(para_args) = args.para_args {
+				let pairs: Vec<_> = para_args.split(',').collect();
+				let mut a = Vec::new();
+				for p in pairs {
+					a.push(if p.contains('=') {
+						let pv: Vec<_> = p.splitn(2, '=').collect();
+						(format!("--{}", pv[0]).as_str(), pv[1]).into()
+					} else {
+						format!("--{p}").as_str().into()
+					});
+				}
+				p.with_default_args(a)
+			} else {
+				p
+			};
+
 			let mut p = p
 				.cumulus_based(true)
 				.with_registration_strategy(RegistrationStrategy::InGenesis)
@@ -334,7 +363,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	});
 
 	log::info!("Sending transactions...");
-	sender_lib::submit_txs(txs, 50).await?;
+	sender_lib::submit_txs(txs, 200).await?;
 	log::info!("All sent");
 
 	tokio::try_join!(subscriber)?;
