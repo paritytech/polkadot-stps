@@ -8,7 +8,6 @@ use subxt::{
 	backend::legacy::LegacyBackend,
 	ext::sp_core::{
 		crypto::{Pair as _, Ss58Codec},
-		sr25519::Pair,
 	},
 	OnlineClient, PolkadotConfig,
 };
@@ -361,7 +360,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	let api = OnlineClient::from_backend(Arc::new(backend)).await?;
 
 	log::info!("Signing transactions...");
-	let txs = sender_lib::sign_txs(api.clone(), send_accs.into_iter().zip(recv_accs.into_iter()))?;
+	let txs = sender_lib::sign_balance_transfers(api.clone(), send_accs.into_iter().zip(recv_accs.into_iter()))?;
 	log::info!("Transactions signed");
 
 	// When using local senders, it is okay to skip pre-conditions check as we've just generated

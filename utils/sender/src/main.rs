@@ -1,7 +1,7 @@
 use clap::Parser;
 use codec::Decode;
 use log::*;
-use sender_lib::{connect, sign_txs};
+use sender_lib::{connect, sign_balance_transfers};
 use std::error::Error;
 use subxt::{ext::sp_core::Pair, utils::AccountId32, OnlineClient, PolkadotConfig};
 
@@ -133,7 +133,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 		res??;
 	}
 
-	let txs = sign_txs(api, sender_accounts.into_iter().zip(receiver_accounts.into_iter()))?;
+	let txs = sign_balance_transfers(api, sender_accounts.into_iter().zip(receiver_accounts.into_iter()))?;
 
 	info!("Starting sender in parallel mode");
 	// let (producer, consumer) = tokio::sync::mpsc::unbounded_channel();
@@ -145,7 +145,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	// 	Err(e) => panic!("Error: {:?}", e),
 	// }
 	// // I/O Bound
-	sender_lib::submit_txs(txs, args.chunk_size).await?;
+	sender_lib::submit_txs(txs).await?;
 
 	Ok(())
 }

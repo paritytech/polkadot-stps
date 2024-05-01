@@ -37,40 +37,35 @@ pub async fn connect(url: &str) -> Result<OnlineClient<PolkadotConfig>, Box<dyn 
 	Err(err.into())
 }
 
-pub fn sign_txs(
-	api: OnlineClient<PolkadotConfig>,
-	txs: impl Iterator<Item = (SrPair, SrPair)>,
-) -> Result<Vec<SubmittableExtrinsic<PolkadotConfig, OnlineClient<PolkadotConfig>>>, Box<dyn Error>>
-{
-	let ext_deposit_query = subxt::dynamic::constant("Balances", "ExistentialDeposit");
-	let ext_deposit =
-		u128::decode(&mut &api.constants().at(&ext_deposit_query)?.into_encoded()[..])?;
+pub type SignedTx = SubmittableExtrinsic<PolkadotConfig, OnlineClient<PolkadotConfig>>;
 
+pub fn sign_txs<P, S, E>(
+	// api: OnlineClient<PolkadotConfig>,
+	params: impl Iterator<Item = P>,
+	signer: S,
+	// txs: impl Iterator<Item = (SrPair, SrPair)>,
+) -> Result<Vec<SignedTx>, Box<dyn Error>>
+where
+	P: Send + 'static,
+	S: Fn(P) -> Result<SignedTx, E> + Send + Sync + 'static,
+	E: Error + Send + 'static
+{
 	let t = std::thread::available_parallelism().unwrap_or(1usize.try_into().unwrap()).get();
 
 	let mut tn = (0..t).cycle();
 	let mut tranges: Vec<_> = (0..t).map(|_| Vec::new()).collect();
-	txs.for_each(|tx| tranges[tn.next().unwrap()].push(tx));
+	params.for_each(|p| tranges[tn.next().unwrap()].push(p));
 	let mut threads = Vec::new();
 
+	let signer = std::sync::Arc::new(signer);
+
 	tranges.into_iter().for_each(|chunk| {
-		let api = api.clone();
+		// let api = api.clone();
+		let signer = signer.clone();
 		threads.push(std::thread::spawn(move || {
 			chunk
 				.into_iter()
-				.map(move |(sender, receiver)| {
-					let signer = PairSigner::new(sender);
-					let tx_params = Params::new().nonce(0).build();
-					let tx_call = subxt::dynamic::tx(
-						"Balances",
-						"transfer_keep_alive",
-						vec![
-							Value::unnamed_variant("Id", [Value::from_bytes(receiver.public())]),
-							Value::u128(ext_deposit),
-						],
-					);
-					api.tx().create_signed_offline(&tx_call, &signer, tx_params)
-				})
+				.map(&*signer)
 				.collect::<Vec<_>>()
 		}));
 	});
@@ -80,6 +75,22 @@ pub fn sign_txs(
 		.map(|h| h.join().unwrap())
 		.flatten()
 		.collect::<Result<Vec<_>, _>>()?)
+}
+
+pub fn sign_balance_transfers(api: OnlineClient<PolkadotConfig>, pairs: impl Iterator<Item = (SrPair, SrPair)>) -> Result<Vec<SignedTx>, Box<dyn Error>> {
+	sign_txs(pairs, move |(sender, receiver)| {
+		let signer = PairSigner::new(sender);
+		let tx_params = Params::new().nonce(0).build();
+		let tx_call = subxt::dynamic::tx(
+			"Balances",
+			"transfer_keep_alive",
+			vec![
+				Value::unnamed_variant("Id", [Value::from_bytes(receiver.public())]),
+				Value::u128(1u32.into()),
+			],
+		);
+		api.tx().create_signed_offline(&tx_call, &signer, tx_params)
+	})
 }
 
 /// Here the signed extrinsics are submitted.
