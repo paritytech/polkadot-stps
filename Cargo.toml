@@ -21,3 +21,4 @@ sp-keyring = "32.0.0"
 subxt = { version = "0.35.3", features = ["substrate-compat"] }
 frame-system = "31.0.0"
 pallet-balances = "31.0.0"
+reqwest = "0.11"

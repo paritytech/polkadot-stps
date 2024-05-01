@@ -1,9 +1,15 @@
 use clap::Parser;
+use jsonrpsee_client_transport::ws::WsTransportClientBuilder;
+use jsonrpsee_core::client::Client;
 use parity_scale_codec::{Compact, Decode};
 use serde_json::json;
-use std::{cmp::max, error::Error, time::Duration};
+use std::{cmp::max, error::Error, sync::Arc, time::Duration};
 use subxt::{
-	ext::sp_core::{crypto::Ss58Codec, sr25519::Pair, crypto::Pair as _},
+	backend::legacy::LegacyBackend,
+	ext::sp_core::{
+		crypto::{Pair as _, Ss58Codec},
+		sr25519::Pair,
+	},
 	OnlineClient, PolkadotConfig,
 };
 use zombienet_sdk::{NetworkConfigBuilder, NetworkConfigExt, NetworkNode, RegistrationStrategy};
@@ -128,11 +134,10 @@ async fn wait_for_metric(
 					},
 				Err(e) => {
 					let cause = e.to_string();
-					if let Ok(ioerr) = e.downcast::<std::io::Error>() {
-						if ioerr.kind() == std::io::ErrorKind::ConnectionRefused {
+					if let Ok(rwerr) = e.downcast::<reqwest::Error>() {
+						if rwerr.is_connect() {
 							log::debug!("Ignoring connection refused error");
-							// The node is not ready to accept connections yet
-							continue;
+							continue
 						}
 					}
 					panic!("Cannot assert on node metric: {:?}", cause)
@@ -187,7 +192,9 @@ async fn block_subscriber(
 		}
 
 		if last_block_ntrans > 0 {
-			log::debug!("Last block time {last_blocktime}, {last_block_ntrans} transactions in block");
+			log::debug!(
+				"Last block time {last_blocktime}, {last_block_ntrans} transactions in block"
+			);
 			total_blocktime += last_blocktime;
 			total_ntrans += last_block_ntrans;
 			max_trans = max(max_trans, last_block_ntrans);
@@ -306,6 +313,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 						format!("--{p}").as_str().into()
 					});
 				}
+				a.push("--".into());
 				p.with_default_args(a)
 			} else {
 				p
@@ -342,7 +350,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	.await?;
 
 	log::info!("Block height reached");
-	let api = node.client().await?;
+
+	let node_url = url::Url::parse(node.ws_uri())?;
+	let (node_sender, node_receiver) = WsTransportClientBuilder::default().build(node_url).await?;
+	let client = Client::builder()
+		.max_buffer_capacity_per_subscription(4096)
+		.max_concurrent_requests(8192)
+		.build_with_tokio(node_sender, node_receiver);
+	let backend = LegacyBackend::builder().build(client);
+	let api = OnlineClient::from_backend(Arc::new(backend)).await?;
 
 	log::info!("Signing transactions...");
 	let txs = sender_lib::sign_txs(api.clone(), send_accs.into_iter().zip(recv_accs.into_iter()))?;
@@ -363,7 +379,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	});
 
 	log::info!("Sending transactions...");
-	sender_lib::submit_txs(txs, 200).await?;
+	sender_lib::submit_txs(txs).await?;
 	log::info!("All sent");
 
 	tokio::try_join!(subscriber)?;

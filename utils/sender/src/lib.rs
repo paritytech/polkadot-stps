@@ -85,23 +85,29 @@ pub fn sign_txs(
 /// Here the signed extrinsics are submitted.
 pub async fn submit_txs(
 	txs: Vec<SubmittableExtrinsic<PolkadotConfig, OnlineClient<PolkadotConfig>>>,
-	chunk_size: usize,
 ) -> Result<(), Box<dyn Error>> {
-	for chunk in txs.chunks(chunk_size) {
-		let futs = chunk.iter().map(|tx| tx.submit()).collect::<FuturesUnordered<_>>();
-		let res = futs.collect::<Vec<_>>().await;
-		for r in res {
-			if let Err(e) = r {
-				warn!("Error sending transaction: {:?}", e);
-			}
+	let futs = txs.iter().map(|tx| tx.submit_and_watch()).collect::<FuturesUnordered<_>>();
+	let res = futs.collect::<Vec<_>>().await;
+	let res: Result<Vec<_>, _> = res.into_iter().collect();
+	let res = res.expect("All the transactions submitted successfully");
+	let mut statuses = futures::stream::select_all(res);
+	while let Some(a) = statuses.next().await {
+		match a {
+			Ok(st) => match st {
+				subxt::tx::TxStatus::Validated => log::info!("VALIDATED"),
+				subxt::tx::TxStatus::Broadcasted { num_peers } =>
+					log::info!("BROADCASTED TO {num_peers}"),
+				subxt::tx::TxStatus::NoLongerInBestBlock => log::warn!("NO LONGER IN BEST BLOCK"),
+				subxt::tx::TxStatus::InBestBlock(_) => log::info!("IN BEST BLOCK"),
+				subxt::tx::TxStatus::InFinalizedBlock(_) => log::info!("IN FINALIZED BLOCK"),
+				subxt::tx::TxStatus::Error { message } => log::warn!("ERROR: {message}"),
+				subxt::tx::TxStatus::Invalid { message } => log::warn!("INVALID: {message}"),
+				subxt::tx::TxStatus::Dropped { message } => log::warn!("DROPPED: {message}"),
+			},
+			Err(e) => {
+				warn!("Error status {:?}", e);
+			},
 		}
-		debug!("Sender submitted chunk with size: {}", chunk_size);
-		// for t in chunk.iter() {
-		// 	let res = t.submit().await;
-		// 	if let Err(e) = res {
-		// 		warn!("Error sending transaction: {:?}", e);
-		// 	}
-		// }
 	}
 	Ok(())
 }

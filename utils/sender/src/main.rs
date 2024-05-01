@@ -74,7 +74,7 @@ async fn check_account(
 		.fetch(&account_state_storage_addr)
 		.await
 		.map_err(AccountError::Subxt)?
-		.expect("Existantial deposit is set")
+		.expect("Existential deposit is set")
 		.into_encoded();
 	let account_state: AccountInfo =
 		Decode::decode(&mut &account_state_encoded[..]).map_err(|_| AccountError::Codec)?;

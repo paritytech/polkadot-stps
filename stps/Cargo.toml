@@ -22,4 +22,8 @@ serde_json = "1.0.114"
 clap-num = "1.1.1"
 futures = "0.3.30"
 parity-scale-codec = "3.6.9"
+reqwest.workspace = true
+url = "2.5"
+jsonrpsee-client-transport = "0.22"
+jsonrpsee-core = "0.22"
 prometheus-endpoint = { package = "substrate-prometheus-endpoint", git = "https://github.com/paritytech/polkadot-sdk", branch = "master" }
