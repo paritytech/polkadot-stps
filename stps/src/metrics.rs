@@ -11,7 +11,7 @@ pub struct StpsMetrics {
 }
 
 impl StpsMetrics {
-	pub fn set(&self, tx_count: u64, block_time: u64, block_number: u32) {
+	pub fn set(&self, tx_count: u64, block_time: u64, block_number: u64) {
 		self.block_tps
 			.with_label_values(&[&block_number.to_string()])
 			.set(tx_count as f64 / block_time as f64);

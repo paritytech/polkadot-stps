@@ -1,25 +1,229 @@
-use clap::Parser;
+use subxt::config::DefaultExtrinsicParamsBuilder;
+use subxt::ext::sp_runtime::traits::IdentifyAccount;
+use sha3::Digest;
+use sha3::Keccak256;
+use parity_scale_codec::Encode;
+use parity_scale_codec::MaxEncodedLen;
+use subxt::ext::sp_core::ecdsa;
+
+
+use subxt::tx::Signer;
+use crate::sp_core::keccak_256;
+
+use subxt::utils::H160;
+
+
+use subxt::Config;
+
+use subxt::ext::sp_runtime;
+use futures::stream::FuturesUnordered;
+use futures::StreamExt;
+
+use subxt::{dynamic::Value as TxValue};
+
+use clap::{Parser, ValueEnum};
 use jsonrpsee_client_transport::ws::WsTransportClientBuilder;
 use jsonrpsee_core::client::Client;
 use parity_scale_codec::{Compact, Decode};
 use serde_json::json;
 use std::{cmp::max, error::Error, sync::Arc, time::Duration};
 use subxt::{
-	backend::legacy::LegacyBackend,
-	ext::sp_core::{
-		crypto::{Pair as _, Ss58Codec},
-	},
-	OnlineClient, PolkadotConfig,
+	backend::legacy::LegacyBackend, ext::sp_core::{self, crypto::{Pair, Ss58Codec}}, tx::PairSigner, OnlineClient, PolkadotConfig
 };
 use zombienet_sdk::{NetworkConfigBuilder, NetworkConfigExt, NetworkNode, RegistrationStrategy};
 
 mod metrics;
 use metrics::*;
 
+#[derive(
+	Eq, PartialEq, Copy, Clone, Encode, Decode, MaxEncodedLen, Default, PartialOrd, Ord,
+)]
+pub struct AccountId20(pub [u8; 20]);
+
+impl_serde::impl_fixed_hash_serde!(AccountId20, 20);
+
+// #[cfg(feature = "std")]
+impl std::fmt::Display for AccountId20 {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		let address = hex::encode(self.0).trim_start_matches("0x").to_lowercase();
+		let address_hash = hex::encode(keccak_256(address.as_bytes()));
+
+		let checksum: String =
+			address
+				.char_indices()
+				.fold(String::from("0x"), |mut acc, (index, address_char)| {
+					let n = u16::from_str_radix(&address_hash[index..index + 1], 16)
+						.expect("Keccak256 hashed; qed");
+
+					if n > 7 {
+						// make char uppercase if ith character is 9..f
+						acc.push_str(&address_char.to_uppercase().to_string())
+					} else {
+						// already lowercased
+						acc.push(address_char)
+					}
+
+					acc
+				});
+		write!(f, "{checksum}")
+	}
+}
+
+impl core::fmt::Debug for AccountId20 {
+	fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+		write!(f, "{:?}", H160(self.0))
+	}
+}
+
+impl From<[u8; 20]> for AccountId20 {
+	fn from(bytes: [u8; 20]) -> Self {
+		Self(bytes)
+	}
+}
+
+impl From<AccountId20> for [u8; 20] {
+	fn from(value: AccountId20) -> Self {
+		value.0
+	}
+}
+
+// NOTE: the implementation is lossy, and is intended to be used
+// only to convert from Polkadot accounts to AccountId20.
+// See https://github.com/moonbeam-foundation/moonbeam/pull/2315#discussion_r1205830577
+// DO NOT USE IT FOR ANYTHING ELSE.
+// impl From<[u8; 32]> for AccountId20 {
+// 	fn from(bytes: [u8; 32]) -> Self {
+// 		let mut buffer = [0u8; 20];
+// 		buffer.copy_from_slice(&bytes[..20]);
+// 		Self(buffer)
+// 	}
+// }
+
+impl From<H160> for AccountId20 {
+	fn from(h160: H160) -> Self {
+		Self(h160.0)
+	}
+}
+
+impl From<AccountId20> for H160 {
+	fn from(value: AccountId20) -> Self {
+		H160(value.0)
+	}
+}
+
+// impl From<AccountId32> for AccountId20 {
+// 	fn from(account: AccountId32) -> Self {
+// 		let bytes: &[u8; 32] = account.as_ref();
+// 		Self::from(*bytes)
+// 	}
+// }
+
+// #[cfg(feature = "std")]
+impl std::str::FromStr for AccountId20 {
+	type Err = &'static str;
+	fn from_str(input: &str) -> Result<Self, Self::Err> {
+		H160::from_str(input).map(Into::into).map_err(|_| "invalid hex address.")
+	}
+}
+
+type EthSignature = [u8; 65];
+
+pub enum MythicalConfig {}
+
+impl Config for MythicalConfig {
+    type Hash = subxt::utils::H256;
+    type AccountId = AccountId20;
+    type Address = AccountId20;
+    type Signature = EthSignature;
+    type Hasher = subxt::config::substrate::BlakeTwo256;
+    type Header = subxt::config::substrate::SubstrateHeader<u32, subxt::config::substrate::BlakeTwo256>;
+    type ExtrinsicParams = subxt::config::SubstrateExtrinsicParams<Self>;
+    type AssetId = u32;
+}
+
+pub struct EthereumSigner {
+	account_id: AccountId20,
+	signer: ecdsa::Pair,
+}
+
+impl sp_runtime::traits::IdentifyAccount for EthereumSigner {
+	type AccountId = AccountId20;
+	fn into_account(self) -> Self::AccountId {
+		self.account_id
+	}
+}
+
+// impl From<[u8; 20]> for EthereumSigner {
+// 	fn from(x: [u8; 20]) -> Self {
+// 		EthereumSigner(x)
+// 	}
+// }
+
+// impl From<ecdsa::Public> for EthereumSigner {
+// 	fn from(x: ecdsa::Public) -> Self {
+// 		let decompressed = libsecp256k1::PublicKey::parse_compressed(&x.0)
+// 			.expect("Wrong compressed public key provided")
+// 			.serialize();
+// 		let mut m = [0u8; 64];
+// 		m.copy_from_slice(&decompressed[1..65]);
+// 		let account = H160::from_slice(&Keccak256::digest(m).as_slice()[12..32]);
+// 		EthereumSigner(account.into())
+// 	}
+// }
+
+impl From<ecdsa::Pair> for EthereumSigner
+// where C::AccountId: AccountId20
+{
+	fn from(pair: ecdsa::Pair) -> Self {
+		let decompressed = libsecp256k1::PublicKey::parse_compressed(&pair.public().0)
+			.expect("Wrong compressed public key provided")
+			.serialize();
+		let mut m = [0u8; 64];
+		m.copy_from_slice(&decompressed[1..65]);
+		Self { account_id: H160::from_slice(&Keccak256::digest(m).as_slice()[12..32]).into(),
+			signer: pair
+		}
+		// let account = H160::from_slice(&Keccak256::digest(m).as_slice()[12..32]);
+		// EthereumSigner(account.into())
+	}
+}
+
+// impl From<libsecp256k1::PublicKey> for EthereumSigner {
+// 	fn from(x: libsecp256k1::PublicKey) -> Self {
+// 		let mut m = [0u8; 64];
+// 		m.copy_from_slice(&x.serialize()[1..65]);
+// 		let account = H160::from_slice(&Keccak256::digest(m).as_slice()[12..32]);
+// 		EthereumSigner(account.into())
+// 	}
+// }
+
+// #[cfg(feature = "std")]
+// impl std::fmt::Display for EthereumSigner {
+// 	fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+// 		write!(fmt, "ethereum signer: {:?}", H160::from_slice(&self.0))
+// 	}
+// }
+
+impl Signer<MythicalConfig> for EthereumSigner {
+    fn account_id(&self) -> <MythicalConfig as Config>::AccountId {
+        self.account_id
+    }
+
+    fn address(&self) -> <MythicalConfig as Config>::Address {
+        self.account_id.clone().into()
+    }
+
+    fn sign(&self, signer_payload: &[u8]) -> <MythicalConfig as Config>::Signature {
+        let hash = keccak_256(signer_payload);
+        let wrapped = libsecp256k1::Message::parse_slice(&hash).unwrap();
+        self.signer.sign_prehashed(&wrapped.0.b32()).try_into().expect("Signature has correct length")
+    }
+}
+
 /// Default derivation path for pre-funded accounts
 const SENDER_SEED: &str = "//Sender";
 const RECEIVER_SEED: &str = "//Receiver";
-const FUNDS: u64 = 10_000_000_000_000_000;
+const FUNDS: u128 = 1_000_000_000_000_000_000_000;
 
 struct HostnameGen {
 	prefix: String,
@@ -35,6 +239,16 @@ impl HostnameGen {
 		self.count += 1;
 		format!("{}{:02}", self.prefix, self.count)
 	}
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+#[value(rename_all = "kebab-case")]
+pub enum BenchMode {
+	/// Standard balance transfers
+	Stps,
+
+	/// NFT transfers
+	NftTransfer,
 }
 
 #[derive(Parser, Debug)]
@@ -53,6 +267,10 @@ struct Args {
 	/// transactions will be signed and submitted.
 	#[arg(long, short, default_value_t = 100_usize)]
 	count: usize,
+
+	/// Benchmark mode
+	#[arg(long, short, value_enum, default_value_t = BenchMode::Stps)]
+	mode: BenchMode,
 
 	/// Path to relay chain node binary.
 	#[arg(long, default_value = "polkadot")]
@@ -152,8 +370,8 @@ fn looks_like_filename<'a>(v: impl Into<&'a str>) -> bool {
 	v.contains(".") || v.contains("/")
 }
 
-async fn block_subscriber(
-	api: OnlineClient<PolkadotConfig>,
+async fn block_subscriber<C: Config>(
+	api: OnlineClient<C>,
 	ntrans: usize,
 	metrics: Option<StpsMetrics>,
 ) -> Result<(), subxt::Error> {
@@ -206,7 +424,7 @@ async fn block_subscriber(
 			);
 			log::info!("Max TPS: {max_tps}, max transactions per block {max_trans}");
 			if let Some(ref metrics) = metrics {
-				metrics.set(last_block_ntrans, last_blocktime, block.number());
+				metrics.set(last_block_ntrans, last_blocktime, block.number().into());
 			}
 		}
 
@@ -234,13 +452,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	};
 	let ntrans = nthreads * args.count;
 
-	let send_accs = funder_lib::derive_accounts(ntrans, SENDER_SEED.to_owned());
-	let recv_accs = funder_lib::derive_accounts(ntrans, RECEIVER_SEED.to_owned());
+	let send_accs: Vec<_> = funder_lib::derive_accounts::<sp_core::ecdsa::Pair>(ntrans, SENDER_SEED.to_owned());
+	let recv_accs: Vec<_> = funder_lib::derive_accounts::<sp_core::ecdsa::Pair>(ntrans, RECEIVER_SEED.to_owned());
 
 	let accs = send_accs
 		.iter()
 		.chain(recv_accs.iter())
-		.map(|p| (p.public().to_ss58check_with_version(args.ss58_prefix.into()), FUNDS))
+		// .map(|p| (p.public().to_ss58check_with_version(args.ss58_prefix.into()), FUNDS))
+		// .map(|p| (format!("0x{}", p.public().as_bytes_ref().to_vec().iter().map(|b| format!("{:02x}", b).to_string()).collect::<Vec<_>>().join("")), FUNDS))
+		.map(|p| (format!("{}", EthereumSigner::from(p.clone()).into_account()), FUNDS))
 		.collect::<Vec<_>>();
 
 	let genesis_accs = json!({ "balances": { "balances": &serde_json::to_value(accs)? } });
@@ -356,11 +576,68 @@ async fn main() -> Result<(), Box<dyn Error>> {
 		.max_buffer_capacity_per_subscription(4096)
 		.max_concurrent_requests(8192)
 		.build_with_tokio(node_sender, node_receiver);
-	let backend = LegacyBackend::builder().build(client);
+	let backend = LegacyBackend::<MythicalConfig>::builder().build(client);
 	let api = OnlineClient::from_backend(Arc::new(backend)).await?;
 
 	log::info!("Signing transactions...");
-	let txs = sender_lib::sign_balance_transfers(api.clone(), send_accs.into_iter().zip(recv_accs.into_iter()))?;
+	let txs = match args.mode {
+		BenchMode::Stps => {
+			let api = api.clone();
+			sender_lib::sign_txs(send_accs.into_iter().zip(recv_accs.into_iter()), move |(sender, receiver)| {
+				let signer = EthereumSigner::from(sender);
+				let tx_params = DefaultExtrinsicParamsBuilder::<MythicalConfig>::new().nonce(0).build();
+				let tx_call = subxt::dynamic::tx(
+					"Balances",
+					"transfer_keep_alive",
+					vec![
+						TxValue::from_bytes(&EthereumSigner::from(receiver).into_account().0),
+						// TxValue::unnamed_variant("Id", [TxValue::from_bytes(&EthereumSigner::from(receiver).into_account().0)]),
+						TxValue::u128(1_000_000_000_000_000_000u128),
+					],
+				);
+				log::warn!("{}", hex::encode(&api.tx().call_data(&tx_call)?));
+
+				api.tx().create_signed_offline(&tx_call, &signer, tx_params.into())
+			})?
+		},
+		//sender_lib::sign_balance_transfers(api.clone(), send_accs.into_iter().zip(recv_accs.into_iter()))?,
+		BenchMode::NftTransfer => todo!(), 
+		// {
+		// 	// let api = api.clone();
+		// 	let create_coll_txs = sender_lib::sign_txs(send_accs.clone().into_iter(), move |sender| {
+		// 		let signer = PairSigner::new(sender.clone().as_bytes());
+		// 		let tx_params = SubstrateExtrinsicParamsBuilder::new().nonce(0).build();
+		// 		let tx_call = subxt::dynamic::tx(
+		// 			"Ntfs",
+		// 			"create",
+		// 			vec![
+		// 				TxValue::unnamed_variant("Id", [TxValue::from_bytes(sender.as_bytes())]), // admin
+		// 				TxValue::primitive(0u64.into()), // settings
+		// 				TxValue::bool(false), // Yolo those `None` Options
+		// 				TxValue::bool(false),
+		// 				TxValue::bool(false),
+		// 				TxValue::bool(false),
+		// 				TxValue::bool(false),
+		// 				TxValue::primitive(0u64.into()), // defaultItemSettings
+		// 			]
+		// 		);
+		// 		api.tx().create_signed_offline(&tx_call, &signer, tx_params)
+		// 	})?;
+		// 	let futs = create_coll_txs.iter().map(|tx| tx.submit_and_watch()).collect::<FuturesUnordered<_>>();
+		// 	let res = futs.collect::<Vec<_>>().await;
+		// 	let res: Result<Vec<_>, _> = res.into_iter().collect();
+		// 	let res = res.expect("All the transactions submitted successfully");
+		// 	let waiter = res.into_iter().map(|txp| txp.wait_for_finalized_success()).collect::<FuturesUnordered<_>>();
+		// 	let res = waiter.collect::<Vec<_>>().await;
+		// 	let res: Result<Vec<_>, _> = res.into_iter().collect();
+		// 	let res = res.expect("All the collection creation transaction finalized");
+		// 	log::info!("{:?}", res);
+		// 	// let mut statuses = futures::stream::select_all(res);
+		// 	// while let Some(a) = statuses.next().await {
+		// 	// }
+		// }
+	};
+	// panic!();
 	log::info!("Transactions signed");
 
 	// When using local senders, it is okay to skip pre-conditions check as we've just generated

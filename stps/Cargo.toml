@@ -11,6 +11,7 @@ clap = { version = "4.5.1", features = ["derive"] }
 env_logger = "0.11.2"
 log = "0.4.20"
 subxt = { version = "0.35.3", features = ["substrate-compat"] }
+# subxt-signer = { version = "0.35.3", features = ["unstable-eth"] }
 tokio = { version = "1.36.0", features = ["rt-multi-thread"] }
 anyhow = "1.0.81"
 # zombienet-sdk = { git = "https://github.com/paritytech/zombienet-sdk", branch = "main" }
@@ -27,3 +28,7 @@ url = "2.5"
 jsonrpsee-client-transport = "0.22"
 jsonrpsee-core = "0.22"
 prometheus-endpoint = { package = "substrate-prometheus-endpoint", git = "https://github.com/paritytech/polkadot-sdk", branch = "master" }
+impl-serde = { version = "0.4.0", default-features = false }
+hex = "0.4"
+libsecp256k1 = { version = "0.7.1", default-features = false }
+sha3 = { version = "0.10.8", default-features = false }

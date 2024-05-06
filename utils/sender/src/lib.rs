@@ -1,14 +1,11 @@
-use codec::Decode;
+
 use std::time::Duration;
 
 use futures::{stream::FuturesUnordered, StreamExt};
 use log::*;
 use std::error::Error;
 use subxt::{
-	config::SubstrateExtrinsicParamsBuilder as Params,
-	dynamic::Value,
-	ext::sp_core::{sr25519::Pair as SrPair, Pair},
-	tx::{PairSigner, SubmittableExtrinsic},
+	tx::SubmittableExtrinsic,
 	OnlineClient, PolkadotConfig,
 };
 
@@ -37,18 +34,19 @@ pub async fn connect(url: &str) -> Result<OnlineClient<PolkadotConfig>, Box<dyn 
 	Err(err.into())
 }
 
-pub type SignedTx = SubmittableExtrinsic<PolkadotConfig, OnlineClient<PolkadotConfig>>;
+pub type SignedTx<C> = SubmittableExtrinsic<C, OnlineClient<C>>;
 
-pub fn sign_txs<P, S, E>(
+pub fn sign_txs<P, S, E, C>(
 	// api: OnlineClient<PolkadotConfig>,
 	params: impl Iterator<Item = P>,
 	signer: S,
 	// txs: impl Iterator<Item = (SrPair, SrPair)>,
-) -> Result<Vec<SignedTx>, Box<dyn Error>>
+) -> Result<Vec<SignedTx<C>>, E>
 where
 	P: Send + 'static,
-	S: Fn(P) -> Result<SignedTx, E> + Send + Sync + 'static,
-	E: Error + Send + 'static
+	S: Fn(P) -> Result<SignedTx<C>, E> + Send + Sync + 'static,
+	E: Error + Send + 'static,
+	C: subxt::Config,
 {
 	let t = std::thread::available_parallelism().unwrap_or(1usize.try_into().unwrap()).get();
 
@@ -60,7 +58,6 @@ where
 	let signer = std::sync::Arc::new(signer);
 
 	tranges.into_iter().for_each(|chunk| {
-		// let api = api.clone();
 		let signer = signer.clone();
 		threads.push(std::thread::spawn(move || {
 			chunk
@@ -77,25 +74,34 @@ where
 		.collect::<Result<Vec<_>, _>>()?)
 }
 
-pub fn sign_balance_transfers(api: OnlineClient<PolkadotConfig>, pairs: impl Iterator<Item = (SrPair, SrPair)>) -> Result<Vec<SignedTx>, Box<dyn Error>> {
-	sign_txs(pairs, move |(sender, receiver)| {
-		let signer = PairSigner::new(sender);
-		let tx_params = Params::new().nonce(0).build();
-		let tx_call = subxt::dynamic::tx(
-			"Balances",
-			"transfer_keep_alive",
-			vec![
-				Value::unnamed_variant("Id", [Value::from_bytes(receiver.public())]),
-				Value::u128(1u32.into()),
-			],
-		);
-		api.tx().create_signed_offline(&tx_call, &signer, tx_params)
-	})
-}
+// pub fn sign_balance_transfers<P, C>(api: OnlineClient<C>, pairs: impl Iterator<Item = (P, P)>) -> Result<Vec<SignedTx<C>>, Box<dyn Error>>
+// where 
+// 	MultiSigner: From<<P as Pair>::Public>,
+// 	subxt::utils::MultiSignature: From<<P as Pair>::Signature>,
+// 	P: Pair + std::marker::Send + 'static,
+// 	C: subxt::Config, <C as subxt::Config>::Signature: From<<P as subxt::ext::sp_core::Pair>::Signature>,
+// 	<C as subxt::Config>::AccountId: From<subxt::utils::AccountId32>,
+// 	C::ExtrinsicParams: From<SubstrateExtrinsicParams<C>>, 
+// 	<<C as subxt::Config>::ExtrinsicParams as subxt::config::ExtrinsicParams<C>>::Params: From<((), (), subxt::config::signed_extensions::CheckNonceParams, (), subxt::config::signed_extensions::CheckMortalityParams<C>, subxt::config::signed_extensions::ChargeAssetTxPaymentParams<C>, subxt::config::signed_extensions::ChargeTransactionPaymentParams)>
+// {
+// 	sign_txs(pairs, move |(sender, receiver)| {
+// 		let signer = PairSigner::new(sender);
+// 		let tx_params = DefaultExtrinsicParamsBuilder::<C>::new().nonce(0).build();
+// 		let tx_call = subxt::dynamic::tx(
+// 			"Balances",
+// 			"transfer_keep_alive",
+// 			vec![
+// 				Value::unnamed_variant("Id", [Value::from_bytes(receiver.public())]),
+// 				Value::u128(1u32.into()),
+// 			],
+// 		);
+// 		api.tx().create_signed_offline(&tx_call, &signer, tx_params.into())
+// 	})
+// }
 
 /// Here the signed extrinsics are submitted.
-pub async fn submit_txs(
-	txs: Vec<SubmittableExtrinsic<PolkadotConfig, OnlineClient<PolkadotConfig>>>,
+pub async fn submit_txs<C: subxt::Config>(
+	txs: Vec<SignedTx<C>>,
 ) -> Result<(), Box<dyn Error>> {
 	let futs = txs.iter().map(|tx| tx.submit_and_watch()).collect::<FuturesUnordered<_>>();
 	let res = futs.collect::<Vec<_>>().await;
