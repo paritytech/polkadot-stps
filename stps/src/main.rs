@@ -26,6 +26,7 @@ use jsonrpsee_client_transport::ws::WsTransportClientBuilder;
 use jsonrpsee_core::client::Client;
 use parity_scale_codec::{Compact, Decode};
 use serde_json::json;
+use std::collections::HashMap;
 use std::{cmp::max, error::Error, sync::Arc, time::Duration};
 use subxt::{
 	backend::legacy::LegacyBackend, ext::sp_core::{self, crypto::{Pair, Ss58Codec}}, tx::PairSigner, OnlineClient, PolkadotConfig
@@ -36,7 +37,7 @@ mod metrics;
 use metrics::*;
 
 #[derive(
-	Eq, PartialEq, Copy, Clone, Encode, Decode, MaxEncodedLen, Default, PartialOrd, Ord,
+	Eq, PartialEq, Copy, Clone, Encode, Decode, MaxEncodedLen, Default, PartialOrd, Ord, Hash
 )]
 pub struct AccountId20(pub [u8; 20]);
 
@@ -579,6 +580,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	let backend = LegacyBackend::<MythicalConfig>::builder().build(client);
 	let api = OnlineClient::from_backend(Arc::new(backend)).await?;
 
+	// let metadata = api.metadata();
+	// log::info!("{:#?}", metadata.types());
+	// panic!();
+
 	log::info!("Signing transactions...");
 	let txs = match args.mode {
 		BenchMode::Stps => {
@@ -595,47 +600,147 @@ async fn main() -> Result<(), Box<dyn Error>> {
 						TxValue::u128(1_000_000_000_000_000_000u128),
 					],
 				);
-				log::warn!("{}", hex::encode(&api.tx().call_data(&tx_call)?));
+				// log::warn!("{}", hex::encode(&api.tx().call_data(&tx_call)?));
 
 				api.tx().create_signed_offline(&tx_call, &signer, tx_params.into())
 			})?
 		},
 		//sender_lib::sign_balance_transfers(api.clone(), send_accs.into_iter().zip(recv_accs.into_iter()))?,
-		BenchMode::NftTransfer => todo!(), 
-		// {
-		// 	// let api = api.clone();
-		// 	let create_coll_txs = sender_lib::sign_txs(send_accs.clone().into_iter(), move |sender| {
-		// 		let signer = PairSigner::new(sender.clone().as_bytes());
-		// 		let tx_params = SubstrateExtrinsicParamsBuilder::new().nonce(0).build();
-		// 		let tx_call = subxt::dynamic::tx(
-		// 			"Ntfs",
-		// 			"create",
-		// 			vec![
-		// 				TxValue::unnamed_variant("Id", [TxValue::from_bytes(sender.as_bytes())]), // admin
-		// 				TxValue::primitive(0u64.into()), // settings
-		// 				TxValue::bool(false), // Yolo those `None` Options
-		// 				TxValue::bool(false),
-		// 				TxValue::bool(false),
-		// 				TxValue::bool(false),
-		// 				TxValue::bool(false),
-		// 				TxValue::primitive(0u64.into()), // defaultItemSettings
-		// 			]
-		// 		);
-		// 		api.tx().create_signed_offline(&tx_call, &signer, tx_params)
-		// 	})?;
-		// 	let futs = create_coll_txs.iter().map(|tx| tx.submit_and_watch()).collect::<FuturesUnordered<_>>();
-		// 	let res = futs.collect::<Vec<_>>().await;
-		// 	let res: Result<Vec<_>, _> = res.into_iter().collect();
-		// 	let res = res.expect("All the transactions submitted successfully");
-		// 	let waiter = res.into_iter().map(|txp| txp.wait_for_finalized_success()).collect::<FuturesUnordered<_>>();
-		// 	let res = waiter.collect::<Vec<_>>().await;
-		// 	let res: Result<Vec<_>, _> = res.into_iter().collect();
-		// 	let res = res.expect("All the collection creation transaction finalized");
-		// 	log::info!("{:?}", res);
-		// 	// let mut statuses = futures::stream::select_all(res);
-		// 	// while let Some(a) = statuses.next().await {
-		// 	// }
-		// }
+		BenchMode::NftTransfer => {
+			let api2 = api.clone();
+			let create_coll_txs = sender_lib::sign_txs(send_accs.clone().into_iter(), move |sender| {
+				// let signer = PairSigner::new(sender.clone().as_bytes());
+				let tx_params = DefaultExtrinsicParamsBuilder::new().nonce(0).build();
+				let tx_call = subxt::dynamic::tx(
+					"Nfts",
+					"create",
+					vec![
+						TxValue::from_bytes(&EthereumSigner::from(sender.clone()).into_account().0),
+						// TxValue::unnamed_variant("Id", [TxValue::from_bytes(sender.as_bytes())]), // admin
+						TxValue::named_composite(
+							vec![
+								("settings", TxValue::primitive(0u64.into())),
+								("max_supply", TxValue::unnamed_variant("None", vec![])),
+								("mint_settings", TxValue::named_composite(vec![
+									("mint_type", TxValue::unnamed_variant("Issuer", vec![])),
+									("price", TxValue::unnamed_variant("None", vec![])),
+									("start_block", TxValue::unnamed_variant("None", vec![])),
+									("end_block", TxValue::unnamed_variant("None", vec![])),
+									("default_item_settings", TxValue::primitive(0u64.into())),
+								])),
+							]
+						)
+					]
+				);
+				// log::warn!("Got transaction data");
+				// let data = api2.tx().call_data(&tx_call)?;
+				// log::warn!("{}", hex::encode(data));
+				api2.tx().create_signed_offline(&tx_call, &EthereumSigner::from(sender), tx_params)
+			})?;
+			let futs = create_coll_txs.iter().map(|tx| tx.submit_and_watch()).collect::<FuturesUnordered<_>>();
+			let res = futs.collect::<Vec<_>>().await.into_iter().collect::<Result<Vec<_>, _>>().expect("All the transactions submitted successfully");
+			let waiter = res.into_iter().map(|txp| txp.wait_for_finalized_success()).collect::<FuturesUnordered<_>>();
+			let res = waiter.collect::<Vec<_>>().await.into_iter().collect::<Result<Vec<_>, _>>().expect("All the collection creation transaction finalized");
+			// log::info!("{:?}", res);
+
+			#[derive(Decode)]
+			struct Collection {
+				clid: [u8; 32],
+				owner: AccountId20,
+			}
+
+			let mut collections = Vec::new();
+
+			for ev in res {
+				// log::info!("=== EVENT ===");
+				for ed in ev.iter() {
+					let ed = ed?;
+					// log::info!("{}::{} == {}", ed.pallet_name(), ed.variant_name(), ed.field_values()?);
+					
+					if ed.pallet_name() == "Nfts" && ed.variant_name() == "Created" {
+						let b = ed.field_bytes();
+						let e = Collection::decode(&mut &b[..])?;
+						collections.push(e);
+					}
+				}
+			}
+
+			let mut map: HashMap<AccountId20, [u8; 32]> = HashMap::new();
+			for c in collections.into_iter() {
+				map.insert(c.owner, c.clid);
+			}
+
+			let mut cll = Vec::new();
+
+			for s in send_accs.clone().into_iter() {
+				let addr = EthereumSigner::from(s.clone()).into_account();
+				let cl = map.get(&addr).expect("Collection exists").clone();
+				cll.push((s, cl));
+			}
+
+			let api2 = api.clone();
+
+			let mint_txs = sender_lib::sign_txs(cll.clone().into_iter(), move |coll| {
+				// let signer = PairSigner::new(sender.clone().as_bytes());
+				let tx_params = DefaultExtrinsicParamsBuilder::new().nonce(1).build();
+				let coll_id: [u64; 4] = [
+					u64::from_le_bytes(coll.1[0..8].try_into().unwrap()),
+					u64::from_le_bytes(coll.1[8..16].try_into().unwrap()),
+					u64::from_le_bytes(coll.1[16..24].try_into().unwrap()),
+					u64::from_le_bytes(coll.1[24..32].try_into().unwrap()),
+				];
+				let tx_call = subxt::dynamic::tx(
+					"Nfts",
+					"mint",
+					vec![
+						// TxValue::from_bytes(&EthereumSigner::from(sender.clone()).into_account().0),
+						// TxValue::unnamed_variant("Id", [TxValue::from_bytes(sender.as_bytes())]), // admin
+						TxValue::unnamed_composite(coll_id.to_vec().into_iter().map(|a| a.into())),
+						TxValue::unnamed_composite(vec![0u64.into(), 0u64.into(), 0u64.into(), 0u64.into()]),
+						TxValue::from_bytes(&EthereumSigner::from(coll.0.clone()).into_account().0),
+						TxValue::unnamed_variant("None", vec![]),
+					]
+				);
+				// log::warn!("Got transaction data");
+				// let data = api2.tx().call_data(&tx_call)?;
+				// log::warn!("{}", hex::encode(data));
+				api2.tx().create_signed_offline(&tx_call, &EthereumSigner::from(coll.0), tx_params)
+			})?;
+
+			let futs = mint_txs.iter().map(|tx| tx.submit_and_watch()).collect::<FuturesUnordered<_>>();
+			let res = futs.collect::<Vec<_>>().await.into_iter().collect::<Result<Vec<_>, _>>().expect("All the mint transactions submitted successfully");
+			let waiter = res.into_iter().map(|txp| txp.wait_for_finalized_success()).collect::<FuturesUnordered<_>>();
+			let _res = waiter.collect::<Vec<_>>().await.into_iter().collect::<Result<Vec<_>, _>>().expect("All the mint transaction finalized");
+			// log::info!("{:?}", res);
+
+			let api2 = api.clone();
+
+			sender_lib::sign_txs(cll.into_iter().zip(recv_accs.into_iter()), move |(coll, receiver)| {
+				let signer = EthereumSigner::from(coll.0);
+				let tx_params = DefaultExtrinsicParamsBuilder::<MythicalConfig>::new().nonce(2).build();
+				let coll_id: [u64; 4] = [
+					u64::from_le_bytes(coll.1[0..8].try_into().unwrap()),
+					u64::from_le_bytes(coll.1[8..16].try_into().unwrap()),
+					u64::from_le_bytes(coll.1[16..24].try_into().unwrap()),
+					u64::from_le_bytes(coll.1[24..32].try_into().unwrap()),
+				];
+				let tx_call = subxt::dynamic::tx(
+					"Nfts",
+					"transfer",
+					vec![
+						TxValue::unnamed_composite(coll_id.to_vec().into_iter().map(|a| a.into())),
+						TxValue::unnamed_composite(vec![0u64.into(), 0u64.into(), 0u64.into(), 0u64.into()]),
+						TxValue::from_bytes(&EthereumSigner::from(receiver).into_account().0),
+					],
+				);
+				// log::warn!("{}", hex::encode(&api2.tx().call_data(&tx_call)?));
+
+				api2.tx().create_signed_offline(&tx_call, &signer, tx_params.into())
+			})?
+			// let mut statuses = futures::stream::select_all(res);
+			// while let Some(a) = statuses.next().await {
+			// }
+		}
 	};
 	// panic!();
 	log::info!("Transactions signed");
