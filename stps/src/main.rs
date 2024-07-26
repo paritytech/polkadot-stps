@@ -353,8 +353,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	let node_url = url::Url::parse(node.ws_uri())?;
 	let (node_sender, node_receiver) = WsTransportClientBuilder::default().build(node_url).await?;
 	let client = Client::builder()
-		.max_buffer_capacity_per_subscription(4096)
-		.max_concurrent_requests(8192)
+		.max_buffer_capacity_per_subscription(4096 * 1024)
+		.max_concurrent_requests(2 * 1024 * 1024)
 		.build_with_tokio(node_sender, node_receiver);
 	let backend = LegacyBackend::builder().build(client);
 	let api = OnlineClient::from_backend(Arc::new(backend)).await?;

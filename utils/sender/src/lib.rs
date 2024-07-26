@@ -5,7 +5,7 @@ use futures::{stream::FuturesUnordered, StreamExt};
 use log::*;
 use std::error::Error;
 use subxt::{
-	config::SubstrateExtrinsicParamsBuilder as Params,
+	config::polkadot::PolkadotExtrinsicParamsBuilder as Params,
 	dynamic::Value,
 	ext::sp_core::{sr25519::Pair as SrPair, Pair},
 	tx::{PairSigner, SubmittableExtrinsic},
@@ -105,12 +105,12 @@ pub async fn submit_txs(
 	while let Some(a) = statuses.next().await {
 		match a {
 			Ok(st) => match st {
-				subxt::tx::TxStatus::Validated => log::info!("VALIDATED"),
+				subxt::tx::TxStatus::Validated => log::trace!("VALIDATED"),
 				subxt::tx::TxStatus::Broadcasted { num_peers } =>
-					log::info!("BROADCASTED TO {num_peers}"),
+					log::trace!("BROADCASTED TO {num_peers}"),
 				subxt::tx::TxStatus::NoLongerInBestBlock => log::warn!("NO LONGER IN BEST BLOCK"),
-				subxt::tx::TxStatus::InBestBlock(_) => log::info!("IN BEST BLOCK"),
-				subxt::tx::TxStatus::InFinalizedBlock(_) => log::info!("IN FINALIZED BLOCK"),
+				subxt::tx::TxStatus::InBestBlock(_) => log::trace!("IN BEST BLOCK"),
+				subxt::tx::TxStatus::InFinalizedBlock(_) => log::trace!("IN FINALIZED BLOCK"),
 				subxt::tx::TxStatus::Error { message } => log::warn!("ERROR: {message}"),
 				subxt::tx::TxStatus::Invalid { message } => log::warn!("INVALID: {message}"),
 				subxt::tx::TxStatus::Dropped { message } => log::warn!("DROPPED: {message}"),
