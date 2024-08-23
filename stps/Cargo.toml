@@ -13,8 +13,8 @@ log = "0.4.20"
 subxt = { version = "0.37", features = ["substrate-compat"] }
 tokio = { version = "1.36.0", features = ["rt-multi-thread"] }
 anyhow = "1.0.81"
-zombienet-sdk = { git = "https://github.com/paritytech/zombienet-sdk", branch = "main" }
-# zombienet-sdk = { path = "../../zombienet-sdk/crates/sdk" }
+# zombienet-sdk = { git = "https://github.com/paritytech/zombienet-sdk", branch = "main" }
+zombienet-sdk = { path = "../../zombienet-sdk/crates/sdk" }
 funder = { path = "../utils/funder" }
 sender = { path = "../utils/sender" }
 serde = "1.0.197"

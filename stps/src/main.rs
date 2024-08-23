@@ -54,6 +54,12 @@ struct Args {
 	#[arg(long, short, default_value_t = 100_usize)]
 	count: usize,
 
+	/// Number of sender and receiver accounts to create. By defauilt, threads*count senders and as many
+	/// receivers are created. With this option, that number may be overridden, but it shouldn't be less
+	/// than threads*count.
+	#[arg(long)]
+	accounts: Option<usize>,
+
 	/// Path to relay chain node binary.
 	#[arg(long, default_value = "polkadot")]
 	relay_bin: String,
@@ -234,8 +240,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	};
 	let ntrans = nthreads * args.count;
 
-	let send_accs = funder_lib::derive_accounts(ntrans, SENDER_SEED.to_owned());
-	let recv_accs = funder_lib::derive_accounts(ntrans, RECEIVER_SEED.to_owned());
+	let naccs = if let Some(accounts) = args.accounts {
+		assert!(accounts >= ntrans, "Number of accounts specified is less than the number of transactions");
+		accounts
+	} else {
+		ntrans
+	};
+
+	let mut send_accs = funder_lib::derive_accounts(naccs, SENDER_SEED.to_owned());
+	let mut recv_accs = funder_lib::derive_accounts(naccs, RECEIVER_SEED.to_owned());
 
 	let accs = send_accs
 		.iter()
@@ -244,6 +257,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 		.collect::<Vec<_>>();
 
 	let genesis_accs = json!({ "balances": { "balances": &serde_json::to_value(accs)? } });
+
+	send_accs.truncate(ntrans);
+	recv_accs.truncate(ntrans);
 
 	let mut relay_hostname = HostnameGen::new("validator");
 
@@ -272,7 +288,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 			r
 		};
 
-		let r = if !args.para { r.with_genesis_overrides(genesis_accs.clone()) } else { r };
+		//let r = if !args.para { r.with_genesis_overrides(genesis_accs.clone()) } else { r };
+		let r = r.with_genesis_overrides(json!({ "configuration": { "config": { "executor_params": [ { "MaxMemoryPages": 8192 }, { "PvfExecTimeout": [ "Backing", 2500 ] } ] } } } ));
 
 		let mut r = r.with_node(|node| node.with_name(relay_hostname.next().as_str()));
 
@@ -288,7 +305,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	} else {
 		let mut para_hostname = HostnameGen::new("collator");
 		relay.with_parachain(|p| {
-			let p = p.with_id(args.para_id).with_default_command(args.para_bin.as_str());
+			let p = p.with_id(args.para_id).with_default_command(args.para_bin.as_str())
+				.with_chain_spec_command("{{mainCommand}} build-spec --extra-heap-pages 65000 --chain {{chainName}} {{disableBootnodes}}");
 
 			let p = if let Some(chain) = args.para_chain {
 				let chain = chain.as_str();
@@ -353,13 +371,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	let node_url = url::Url::parse(node.ws_uri())?;
 	let (node_sender, node_receiver) = WsTransportClientBuilder::default().build(node_url).await?;
 	let client = Client::builder()
+		.request_timeout(Duration::from_secs(3600))
 		.max_buffer_capacity_per_subscription(4096 * 1024)
 		.max_concurrent_requests(2 * 1024 * 1024)
 		.build_with_tokio(node_sender, node_receiver);
 	let backend = LegacyBackend::builder().build(client);
 	let api = OnlineClient::from_backend(Arc::new(backend)).await?;
 
-	log::info!("Signing transactions...");
+	log::info!("Signing {} transactions...", send_accs.len());
 	let txs = sender_lib::sign_balance_transfers(api.clone(), send_accs.into_iter().zip(recv_accs.into_iter()))?;
 	log::info!("Transactions signed");
 

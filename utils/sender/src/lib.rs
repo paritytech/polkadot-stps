@@ -1,6 +1,4 @@
-use codec::Decode;
 use std::time::Duration;
-
 use futures::{stream::FuturesUnordered, StreamExt};
 use log::*;
 use std::error::Error;
@@ -112,8 +110,8 @@ pub async fn submit_txs(
 				subxt::tx::TxStatus::InBestBlock(_) => log::trace!("IN BEST BLOCK"),
 				subxt::tx::TxStatus::InFinalizedBlock(_) => log::trace!("IN FINALIZED BLOCK"),
 				subxt::tx::TxStatus::Error { message } => log::warn!("ERROR: {message}"),
-				subxt::tx::TxStatus::Invalid { message } => log::warn!("INVALID: {message}"),
-				subxt::tx::TxStatus::Dropped { message } => log::warn!("DROPPED: {message}"),
+				subxt::tx::TxStatus::Invalid { message } => log::trace!("INVALID: {message}"),
+				subxt::tx::TxStatus::Dropped { message } => log::trace!("DROPPED: {message}"),
 			},
 			Err(e) => {
 				warn!("Error status {:?}", e);
