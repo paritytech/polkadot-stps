@@ -75,10 +75,10 @@ where
 		.collect::<Result<Vec<_>, _>>()?)
 }
 
-pub fn sign_balance_transfers(api: OnlineClient<PolkadotConfig>, pairs: impl Iterator<Item = (SrPair, SrPair)>) -> Result<Vec<SignedTx>, Box<dyn Error>> {
-	sign_txs(pairs, move |(sender, receiver)| {
+pub fn sign_balance_transfers(api: OnlineClient<PolkadotConfig>, pairs: impl Iterator<Item = ((SrPair, u64), SrPair)>) -> Result<Vec<SignedTx>, Box<dyn Error>> {
+	sign_txs(pairs, move |((sender, nonce), receiver)| {
 		let signer = PairSigner::new(sender);
-		let tx_params = Params::new().nonce(0).build();
+		let tx_params = Params::new().nonce(nonce).build();
 		let tx_call = subxt::dynamic::tx(
 			"Balances",
 			"transfer_keep_alive",

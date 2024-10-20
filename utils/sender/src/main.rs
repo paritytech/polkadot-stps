@@ -1,8 +1,9 @@
+use futures::{stream::FuturesUnordered, StreamExt};
 use clap::Parser;
 use codec::Decode;
 use log::*;
 use sender_lib::{connect, sign_balance_transfers};
-use std::error::Error;
+use std::{collections::HashMap, error::Error};
 use subxt::{ext::sp_core::Pair, utils::AccountId32, OnlineClient, PolkadotConfig};
 
 const SENDER_SEED: &str = "//Sender";
@@ -56,39 +57,45 @@ impl std::fmt::Display for AccountError {
 impl Error for AccountError {}
 
 /// Check account nonce and free balance
-async fn check_account(
-	api: OnlineClient<PolkadotConfig>,
-	account: AccountId32,
-	ext_deposit: u128,
-) -> Result<(), AccountError> {
-	let account_state_storage_addr = subxt::dynamic::storage("System", "Account", vec![account]);
-	let finalized_head_hash = api
-		.backend()
-		.latest_finalized_block_ref()
-		.await
-		.map_err(AccountError::Subxt)?
-		.hash();
-	let account_state_encoded = api
-		.storage()
-		.at(finalized_head_hash)
-		.fetch(&account_state_storage_addr)
-		.await
-		.map_err(AccountError::Subxt)?
-		.expect("Existential deposit is set")
-		.into_encoded();
-	let account_state: AccountInfo =
-		Decode::decode(&mut &account_state_encoded[..]).map_err(|_| AccountError::Codec)?;
+// async fn check_account(
+// 	api: OnlineClient<PolkadotConfig>,
+// 	account: AccountId32,
+// 	ext_deposit: u128,
+// ) -> Result<(), AccountError> {
+// 	let account_state_storage_addr = subxt::dynamic::storage("System", "Account", vec![account]);
+// 	let finalized_head_hash = api
+// 		.backend()
+// 		.latest_finalized_block_ref()
+// 		.await
+// 		.map_err(AccountError::Subxt)?
+// 		.hash();
+// 	let account_state_encoded = api
+// 		.storage()
+// 		.at(finalized_head_hash)
+// 		.fetch(&account_state_storage_addr)
+// 		.await
+// 		.map_err(AccountError::Subxt)?
+// 		.expect("Existential deposit is set")
+// 		.into_encoded();
+// 	let account_state: AccountInfo =
+// 		Decode::decode(&mut &account_state_encoded[..]).map_err(|_| AccountError::Codec)?;
 
-	if account_state.nonce != 0 {
-		panic!("Account has non-zero nonce");
-	}
+// 	if account_state.nonce != 0 {
+// 		panic!("Account has non-zero nonce");
+// 	}
 
-	// Reserve 10% for fees
-	if (account_state.data.free as f64) < ext_deposit as f64 * 1.1 {
-		panic!("Account has insufficient funds");
-	}
-	Ok(())
-}
+// 	// Reserve 10% for fees
+// 	if (account_state.data.free as f64) < ext_deposit as f64 * 1.1 {
+// 		panic!("Account has insufficient funds");
+// 	}
+// 	Ok(())
+// }
+
+use jsonrpsee_client_transport::ws::WsTransportClientBuilder;
+use jsonrpsee_core::client::Client;
+use subxt::backend::legacy::LegacyBackend;
+use std::sync::Arc;
+use tokio::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -110,10 +117,47 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	};
 
 	// Create the client here, so that we can use it in the various functions.
-	let api = connect(&args.node_url).await?;
+	// let api = connect(&args.node_url).await?;
+
+	let node_url = url::Url::parse(&args.node_url)?;
+	let (node_sender, node_receiver) = WsTransportClientBuilder::default().build(node_url).await?;
+	let client = Client::builder()
+		.request_timeout(Duration::from_secs(3600))
+		.max_buffer_capacity_per_subscription(4096 * 1024)
+		.max_concurrent_requests(2 * 1024 * 1024)
+		.build_with_tokio(node_sender, node_receiver);
+	let backend = LegacyBackend::builder().build(client);
+	let api = OnlineClient::from_backend(Arc::new(backend)).await?;
 
 	let sender_accounts = funder_lib::derive_accounts(n_tx_sender, SENDER_SEED.to_owned());
 	let receiver_accounts = funder_lib::derive_accounts(n_tx_sender, RECEIVER_SEED.to_owned());
+
+	let now = std::time::Instant::now();
+
+	let futs = sender_accounts.iter().map(|a| {
+		let pubkey = a.public();
+		let runtime_api_call = subxt::dynamic::runtime_api_call(
+			"AccountNonceApi",
+			"account_nonce",
+			vec![subxt::dynamic::Value::from_bytes(pubkey)],
+		);
+		let fapi = api.clone();
+		async move {
+			(pubkey, fapi
+				.runtime_api()
+				.at_latest()
+				.await
+				.expect("Runtime API available")
+				.call(runtime_api_call)
+				.await
+				.expect("Nonce is known")
+			)
+		}
+	}).collect::<FuturesUnordered<_>>();
+	let noncemap = futs.collect::<Vec<_>>().await.into_iter().map(|(p, v)| (p, v.to_value().expect("Nonce is decoded correctly").as_u128().unwrap() as u64)).collect::<HashMap<_, _>>();
+
+	let elapsed = now.elapsed();
+	info!("Got nonces in {:?}", elapsed);
 
 	let ext_deposit_query = subxt::dynamic::constant("Balances", "ExistentialDeposit");
 	let ext_deposit = api
@@ -123,17 +167,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
 		.as_u128()
 		.expect("Only u128 deposits are supported");
 
-	let mut precheck_set = tokio::task::JoinSet::new();
-	sender_accounts.iter().for_each(|a| {
-		let account_id: AccountId32 = a.public().into();
-		let api = api.clone();
-		precheck_set.spawn(check_account(api, account_id, ext_deposit));
-	});
-	while let Some(res) = precheck_set.join_next().await {
-		res??;
-	}
+	// let mut precheck_set = tokio::task::JoinSet::new();
+	// sender_accounts.iter().for_each(|a| {
+	// 	let account_id: AccountId32 = a.public().into();
+	// 	let api = api.clone();
+	// 	precheck_set.spawn(check_account(api, account_id, ext_deposit));
+	// });
+	// while let Some(res) = precheck_set.join_next().await {
+	// 	res??;
+	// }
 
-	let txs = sign_balance_transfers(api, sender_accounts.into_iter().zip(receiver_accounts.into_iter()))?;
+	let now = std::time::Instant::now();
+	let txs = sign_balance_transfers(api, sender_accounts.into_iter().map(|sa| (sa.clone(), noncemap[&sa.public()])).zip(receiver_accounts.into_iter()))?;
+	let elapsed = now.elapsed();
+	info!("Signed in {:?}", elapsed);
 
 	info!("Starting sender in parallel mode");
 	// let (producer, consumer) = tokio::sync::mpsc::unbounded_channel();
