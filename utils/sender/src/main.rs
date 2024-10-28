@@ -136,36 +136,55 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 	let futs = sender_accounts.iter().map(|a| {
 		let pubkey = a.public();
-		let runtime_api_call = subxt::dynamic::runtime_api_call(
-			"AccountNonceApi",
-			"account_nonce",
-			vec![subxt::dynamic::Value::from_bytes(pubkey)],
-		);
+		// let runtime_api_call = subxt::dynamic::runtime_api_call(
+		// 	"AccountNonceApi",
+		// 	"account_nonce",
+		// 	vec![subxt::dynamic::Value::from_bytes(pubkey)],
+		// );
 		let fapi = api.clone();
+		// let account: AccountId32 = pubkey.into();
+		let account_state_storage_addr = subxt::dynamic::storage("System", "Account", vec![subxt::dynamic::Value::from_bytes(pubkey)]);
 		async move {
-			(pubkey, fapi
-				.runtime_api()
+			let account_state_enc = fapi
+				.storage()
 				.at_latest()
 				.await
-				.expect("Runtime API available")
-				.call(runtime_api_call)
+				.expect("Storage API available")
+				.fetch(&account_state_storage_addr)
 				.await
-				.expect("Nonce is known")
-			)
+				.expect("Account status fetched")
+				.expect("Nonce is set")
+				.into_encoded();
+			let account_state: AccountInfo = Decode::decode(&mut &account_state_enc[..]).expect("Account state decodes successfuly");
+
+
+
+			(pubkey, account_state.nonce)
+
+
+				// fapi
+				// .runtime_api()
+				// .at_latest()
+				// .await
+				// .expect("Runtime API available")
+				// .call(runtime_api_call)
+				// .await
+				// .expect("Nonce is known")
+			// )
 		}
 	}).collect::<FuturesUnordered<_>>();
-	let noncemap = futs.collect::<Vec<_>>().await.into_iter().map(|(p, v)| (p, v.to_value().expect("Nonce is decoded correctly").as_u128().unwrap() as u64)).collect::<HashMap<_, _>>();
+	let noncemap = futs.collect::<Vec<_>>().await.into_iter().collect::<HashMap<_, _>>();
 
 	let elapsed = now.elapsed();
 	info!("Got nonces in {:?}", elapsed);
 
-	let ext_deposit_query = subxt::dynamic::constant("Balances", "ExistentialDeposit");
-	let ext_deposit = api
-		.constants()
-		.at(&ext_deposit_query)?
-		.to_value()?
-		.as_u128()
-		.expect("Only u128 deposits are supported");
+	// let ext_deposit_query = subxt::dynamic::constant("Balances", "ExistentialDeposit");
+	// let ext_deposit = api
+	// 	.constants()
+	// 	.at(&ext_deposit_query)?
+	// 	.to_value()?
+	// 	.as_u128()
+	// 	.expect("Only u128 deposits are supported");
 
 	// let mut precheck_set = tokio::task::JoinSet::new();
 	// sender_accounts.iter().for_each(|a| {
@@ -178,7 +197,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	// }
 
 	let now = std::time::Instant::now();
-	let txs = sign_balance_transfers(api, sender_accounts.into_iter().map(|sa| (sa.clone(), noncemap[&sa.public()])).zip(receiver_accounts.into_iter()))?;
+	let txs = sign_balance_transfers(api, sender_accounts.into_iter().map(|sa| (sa.clone(), noncemap[&sa.public()] as u64)).zip(receiver_accounts.into_iter()))?;
 	let elapsed = now.elapsed();
 	info!("Signed in {:?}", elapsed);
 
