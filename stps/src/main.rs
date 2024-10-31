@@ -575,7 +575,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 			let mut proc_mint = 0;
 			while proc_mint < ntrans {
-				let e = coll_recv.recv().await.expect("Recv receives");
+				let e = coll_recv.recv().await.expect("Receiver receives");
 				if !matches!(e, FinalizedEvent::NftMinted) {
 					panic!("Unexpected event");
 				}

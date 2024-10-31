@@ -4,7 +4,16 @@ use codec::Decode;
 use log::*;
 use sender_lib::{connect, sign_balance_transfers};
 use std::{collections::HashMap, error::Error};
-use subxt::{ext::sp_core::Pair, utils::AccountId32, OnlineClient, PolkadotConfig};
+// use subxt::{ext::sp_core::Pair, utils::AccountId32, OnlineClient, PolkadotConfig};
+
+use subxt::{
+	config::polkadot::PolkadotExtrinsicParamsBuilder as Params,
+	dynamic::Value,
+	ext::sp_core::{sr25519::Pair as SrPair, Pair},
+	tx::{PairSigner, SubmittableExtrinsic},
+	OnlineClient, PolkadotConfig,
+};
+use tokio::sync::{Mutex, Semaphore};
 
 const SENDER_SEED: &str = "//Sender";
 const RECEIVER_SEED: &str = "//Receiver";
@@ -132,17 +141,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	let sender_accounts = funder_lib::derive_accounts(n_tx_sender, SENDER_SEED.to_owned());
 	let receiver_accounts = funder_lib::derive_accounts(n_tx_sender, RECEIVER_SEED.to_owned());
 
+	let tx_templates = receiver_accounts.iter().map(|a| 
+		subxt::dynamic::tx(
+			"Balances",
+			"transfer_keep_alive",
+			vec![
+				Value::unnamed_variant("Id", [Value::from_bytes(a.public())]),
+				Value::u128(1u32.into()),
+			],
+		)
+	).collect::<Vec<_>>();
+
+	let sender_signers = sender_accounts.iter().cloned().map(PairSigner::<PolkadotConfig, SrPair>::new).collect::<Vec<_>>();
+
 	let now = std::time::Instant::now();
 
 	let futs = sender_accounts.iter().map(|a| {
 		let pubkey = a.public();
-		// let runtime_api_call = subxt::dynamic::runtime_api_call(
-		// 	"AccountNonceApi",
-		// 	"account_nonce",
-		// 	vec![subxt::dynamic::Value::from_bytes(pubkey)],
-		// );
 		let fapi = api.clone();
-		// let account: AccountId32 = pubkey.into();
 		let account_state_storage_addr = subxt::dynamic::storage("System", "Account", vec![subxt::dynamic::Value::from_bytes(pubkey)]);
 		async move {
 			let account_state_enc = fapi
@@ -155,53 +171,69 @@ async fn main() -> Result<(), Box<dyn Error>> {
 				.expect("Account status fetched")
 				.expect("Nonce is set")
 				.into_encoded();
+
 			let account_state: AccountInfo = Decode::decode(&mut &account_state_enc[..]).expect("Account state decodes successfuly");
-
-
-
 			(pubkey, account_state.nonce)
-
-
-				// fapi
-				// .runtime_api()
-				// .at_latest()
-				// .await
-				// .expect("Runtime API available")
-				// .call(runtime_api_call)
-				// .await
-				// .expect("Nonce is known")
-			// )
 		}
 	}).collect::<FuturesUnordered<_>>();
-	let noncemap = futs.collect::<Vec<_>>().await.into_iter().collect::<HashMap<_, _>>();
 
-	let elapsed = now.elapsed();
-	info!("Got nonces in {:?}", elapsed);
+	let mut noncemap = 
+		// Arc::new(Mutex::new(
+			futs.collect::<Vec<_>>().await.into_iter().collect::<HashMap<_, _>>()
+		// ))
+	;
+	info!("Got nonces in {:?}", now.elapsed());
 
-	// let ext_deposit_query = subxt::dynamic::constant("Balances", "ExistentialDeposit");
-	// let ext_deposit = api
-	// 	.constants()
-	// 	.at(&ext_deposit_query)?
-	// 	.to_value()?
-	// 	.as_u128()
-	// 	.expect("Only u128 deposits are supported");
+	let sema = Arc::new(Semaphore::new(n_tx_sender));
 
-	// let mut precheck_set = tokio::task::JoinSet::new();
-	// sender_accounts.iter().for_each(|a| {
-	// 	let account_id: AccountId32 = a.public().into();
-	// 	let api = api.clone();
-	// 	precheck_set.spawn(check_account(api, account_id, ext_deposit));
-	// });
-	// while let Some(res) = precheck_set.join_next().await {
-	// 	res??;
-	// }
+	info!("Starting sender");
+	
+	let mut txi = (0..n_tx_sender).cycle();
 
-	let now = std::time::Instant::now();
-	let txs = sign_balance_transfers(api, sender_accounts.into_iter().map(|sa| (sa.clone(), noncemap[&sa.public()] as u64)).zip(receiver_accounts.into_iter()))?;
-	let elapsed = now.elapsed();
-	info!("Signed in {:?}", elapsed);
+	loop {
+		let i = txi.next().unwrap();
+		let permit = sema.clone().acquire_owned().await.unwrap();
+		// let noncemap = noncemap.clone();
+		let fapi = api.clone();
+		let sender = &sender_accounts[i];
+		// let receiver = &receiver_accounts[i];
+		let signer = sender_signers[i].clone();
+		let tx_payload = tx_templates[i].clone();
+		let nonceref = noncemap.get_mut(&sender.public()).unwrap();
+		let nonce = *nonceref;
+		*nonceref = nonce + 1;
+		let tx_params = Params::new().nonce(nonce as u64).build();
+		let task = async move {
+			let tx = fapi.tx().create_signed_offline(&tx_payload, &signer, tx_params).unwrap();
+			let mut watch = tx.submit_and_watch().await.unwrap();
+			while let Some(a) = watch.next().await {
+				match a {
+					Ok(st) => match st {
+						subxt::tx::TxStatus::Validated => { log::trace!("VALIDATED") },
+						subxt::tx::TxStatus::Broadcasted { num_peers } =>
+							log::trace!("BROADCASTED TO {num_peers}"),
+						subxt::tx::TxStatus::NoLongerInBestBlock => log::warn!("NO LONGER IN BEST BLOCK"),
+						subxt::tx::TxStatus::InBestBlock(_) => { log::trace!("IN BEST BLOCK"); break; },
+						subxt::tx::TxStatus::InFinalizedBlock(_) => log::trace!("IN FINALIZED BLOCK"),
+						subxt::tx::TxStatus::Error { message } => log::warn!("ERROR: {message}"),
+						subxt::tx::TxStatus::Invalid { message } => log::warn!("INVALID: {message}"),
+						subxt::tx::TxStatus::Dropped { message } => log::warn!("DROPPED: {message}"),
+					},
+					Err(e) => {
+						warn!("Error status {:?}", e);
+					},
+				}
+			}
+			drop(permit);
+		};
+		tokio::spawn(task);
+	}
 
-	info!("Starting sender in parallel mode");
+	// let now = std::time::Instant::now();
+	// let txs = sign_balance_transfers(api, sender_accounts.into_iter().map(|sa| (sa.clone(), noncemap[&sa.public()] as u64)).zip(receiver_accounts.into_iter()))?;
+	// let elapsed = now.elapsed();
+	// info!("Signed in {:?}", elapsed);
+
 	// let (producer, consumer) = tokio::sync::mpsc::unbounded_channel();
 	// I/O Bound
 	// pre::parallel_pre_conditions(&api, args.threads, n_tx_sender).await?;
@@ -211,7 +243,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	// 	Err(e) => panic!("Error: {:?}", e),
 	// }
 	// // I/O Bound
-	sender_lib::submit_txs(txs).await?;
+	// sender_lib::submit_txs(txs).await?;
 
 	Ok(())
 }
