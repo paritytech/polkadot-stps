@@ -3,7 +3,7 @@ use clap::Parser;
 use codec::Decode;
 use log::*;
 use sender_lib::{connect, sign_balance_transfers};
-use std::{collections::HashMap, error::Error};
+use std::{collections::HashMap, error::Error, sync::atomic::{AtomicBool, Ordering}};
 // use subxt::{ext::sp_core::Pair, utils::AccountId32, OnlineClient, PolkadotConfig};
 
 use subxt::{
@@ -177,35 +177,46 @@ async fn main() -> Result<(), Box<dyn Error>> {
 		}
 	}).collect::<FuturesUnordered<_>>();
 
-	let mut noncemap = 
-		// Arc::new(Mutex::new(
+	let noncemap = 
+		Arc::new(Mutex::new(
 			futs.collect::<Vec<_>>().await.into_iter().collect::<HashMap<_, _>>()
-		// ))
+		))
 	;
 	info!("Got nonces in {:?}", now.elapsed());
 
-	let sema = Arc::new(Semaphore::new(n_tx_sender));
-
+	let sema = Arc::new(Semaphore::new(n_tx_sender / 2));
+	let account_locks = //Arc::new(
+		(0..n_tx_sender).map(|_| Arc::new(AtomicBool::new(false))).collect::<Vec<_>>()
+//	)
+	;
 	info!("Starting sender");
 	
 	let mut txi = (0..n_tx_sender).cycle();
 
 	loop {
 		let i = txi.next().unwrap();
+		// if i % 1000 == 0 {
+		// 	info!("AT {}", i);
+		// }
+		if account_locks[i].compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed).is_err() {
+			continue;
+		}
 		let permit = sema.clone().acquire_owned().await.unwrap();
-		// let noncemap = noncemap.clone();
+		let alock = account_locks[i].clone();
+		let noncemap = noncemap.clone();
 		let fapi = api.clone();
-		let sender = &sender_accounts[i];
+		let sender = sender_accounts[i].clone();
 		// let receiver = &receiver_accounts[i];
 		let signer = sender_signers[i].clone();
 		let tx_payload = tx_templates[i].clone();
-		let nonceref = noncemap.get_mut(&sender.public()).unwrap();
-		let nonce = *nonceref;
-		*nonceref = nonce + 1;
-		let tx_params = Params::new().nonce(nonce as u64).build();
 		let task = async move {
+			let nonce = {
+				let lock = noncemap.lock().await;
+				*lock.get(&sender.public()).unwrap()
+			};
+			let tx_params = Params::new().nonce(nonce as u64).build();
 			let tx = fapi.tx().create_signed_offline(&tx_payload, &signer, tx_params).unwrap();
-			let mut watch = tx.submit_and_watch().await.unwrap();
+			let Ok(mut watch) = tx.submit_and_watch().await else { return };
 			while let Some(a) = watch.next().await {
 				match a {
 					Ok(st) => match st {
@@ -213,7 +224,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
 						subxt::tx::TxStatus::Broadcasted { num_peers } =>
 							log::trace!("BROADCASTED TO {num_peers}"),
 						subxt::tx::TxStatus::NoLongerInBestBlock => log::warn!("NO LONGER IN BEST BLOCK"),
-						subxt::tx::TxStatus::InBestBlock(_) => { log::trace!("IN BEST BLOCK"); break; },
+						subxt::tx::TxStatus::InBestBlock(_) => {
+							log::trace!("IN BEST BLOCK");
+							{
+								let mut lock = noncemap.lock().await;
+								let nonceref = lock.get_mut(&sender.public()).unwrap();
+								*nonceref = *nonceref + 1;
+							}
+							break;
+						},
 						subxt::tx::TxStatus::InFinalizedBlock(_) => log::trace!("IN FINALIZED BLOCK"),
 						subxt::tx::TxStatus::Error { message } => log::warn!("ERROR: {message}"),
 						subxt::tx::TxStatus::Invalid { message } => log::warn!("INVALID: {message}"),
@@ -224,6 +243,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 					},
 				}
 			}
+			alock.store(false, Ordering::Relaxed);
 			drop(permit);
 		};
 		tokio::spawn(task);
@@ -245,5 +265,5 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	// // I/O Bound
 	// sender_lib::submit_txs(txs).await?;
 
-	Ok(())
+	// Ok(())
 }
