@@ -466,7 +466,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	log::info!("Signing {} transactions...", send_accs.len());
 	let txs = match args.mode {
 		BenchMode::Stps => {
-			sender_lib::sign_balance_transfers(api.clone(), send_accs.into_iter().zip(recv_accs.into_iter()))?
+			sender_lib::sign_balance_transfers(api.clone(), send_accs.into_iter().map(|a| (a, 0)).zip(recv_accs.into_iter()))?
 			// let api = api.clone();
 			// sender_lib::sign_txs(send_accs.into_iter().zip(recv_accs.into_iter()), move |(sender, receiver)| {
 			// 	let signer = EthereumSigner::from(sender);
