@@ -1,7 +1,6 @@
-use std::time::Duration;
 use futures::{stream::FuturesUnordered, StreamExt};
 use log::*;
-use std::error::Error;
+use std::{error::Error, time::Duration};
 use subxt::{
 	config::polkadot::PolkadotExtrinsicParamsBuilder as Params,
 	dynamic::Value,
@@ -46,7 +45,7 @@ pub fn sign_txs<P, S, E>(
 where
 	P: Send + 'static,
 	S: Fn(P) -> Result<SignedTx, E> + Send + Sync + 'static,
-	E: Error + Send + 'static
+	E: Error + Send + 'static,
 {
 	let t = std::thread::available_parallelism().unwrap_or(1usize.try_into().unwrap()).get();
 
@@ -60,12 +59,8 @@ where
 	tranges.into_iter().for_each(|chunk| {
 		// let api = api.clone();
 		let signer = signer.clone();
-		threads.push(std::thread::spawn(move || {
-			chunk
-				.into_iter()
-				.map(&*signer)
-				.collect::<Vec<_>>()
-		}));
+		threads
+			.push(std::thread::spawn(move || chunk.into_iter().map(&*signer).collect::<Vec<_>>()));
 	});
 
 	Ok(threads
@@ -75,7 +70,10 @@ where
 		.collect::<Result<Vec<_>, _>>()?)
 }
 
-pub fn sign_balance_transfers(api: OnlineClient<PolkadotConfig>, pairs: impl Iterator<Item = ((SrPair, u64), SrPair)>) -> Result<Vec<SignedTx>, Box<dyn Error>> {
+pub fn sign_balance_transfers(
+	api: OnlineClient<PolkadotConfig>,
+	pairs: impl Iterator<Item = ((SrPair, u64), SrPair)>,
+) -> Result<Vec<SignedTx>, Box<dyn Error>> {
 	sign_txs(pairs, move |((sender, nonce), receiver)| {
 		let signer = PairSigner::new(sender);
 		let tx_params = Params::new().nonce(nonce).build();
