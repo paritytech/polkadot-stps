@@ -181,11 +181,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 				let now = std::time::Instant::now();
 				let block_ref: BlockRef<subxt::utils::H256> = BlockRef::from_hash(best_block.read().await.0.hash());
 
-				let futs = sender_accounts
-					.iter()
-					.map(|a| get_account_nonce(&api, block_ref.clone(),a).map(|n| (a.public(), n)))
-					.collect::<FuturesUnordered<_>>();
-
 				info!("Starting sender");
 
 				// Overall metrics that we use to throttle
@@ -212,7 +207,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 					let in_block = in_block.clone();
 
 					// Use one API instance per 1/10 workers.
-					let api = if i % 200 == 0  {
+					let api = if i % 500 == 0  {
 						create_api(node_url.clone()).await
 					} else {
 						api.clone()
@@ -225,7 +220,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 						let mut sleep_time_ms = 0u64;	
 						let block_ref: BlockRef<subxt::utils::H256> = BlockRef::from_hash(best_block.read().await.0.hash());
 						let mut nonce = get_account_nonce(&api, block_ref.clone(), &sender).await;
-
 
 						loop {
 							if sent.load(Ordering::SeqCst) > in_block.load(Ordering::SeqCst) + 12000 { // TODO: rpc pool size
@@ -258,38 +252,31 @@ fn main() -> Result<(), Box<dyn Error>> {
 								.create_signed_offline(&tx_payload, &signer, tx_params)
 								.unwrap();
 
-							if let Ok(ValidationResult::Invalid(_)) = tx.validate().await {
-								log::info!("Bad transaction avoided");
+							// if let Ok(ValidationResult::Invalid(_)) = tx.validate().await {
+							// 	log::info!("Bad transaction avoided");
 
-								let block_ref: BlockRef<subxt::utils::H256> = BlockRef::from_hash(best_block.read().await.0.hash());
-								nonce = get_account_nonce(&api, block_ref, &sender).await;
-								sleep_time_ms = 0;
-								continue
-							}
+							// 	let block_ref: BlockRef<subxt::utils::H256> = BlockRef::from_hash(best_block.read().await.0.hash());
+							// 	nonce = get_account_nonce(&api, block_ref, &sender).await;
+							// 	sleep_time_ms = 0;
+							// 	continue
+							// }
 							
-							let Ok(result) = timeout(Duration::from_millis(500), tx.submit_and_watch()).await else {
-								// Timeout, retry in 10ms.
-								sleep_time_ms = 10;
-								log::debug!("Timeout(500ms) submitting transaction");
-								continue;
-							};
-
-							// let mut watch = match result{
-							// 	Ok(watch) => watch,
-							// 	Err(err) => {
-							// 		log::debug!("{:?}", err);
-							// 		let block_ref: BlockRef<subxt::utils::H256> = BlockRef::from_hash(best_block.read().await.0.hash());
-							// 		nonce = get_account_nonce(&api, block_ref, &sender).await;
+							let mut watch = match tx.submit_and_watch().await {
+								Ok(watch) => watch,
+								Err(err) => {
+									log::debug!("{:?}", err);
+									let block_ref: BlockRef<subxt::utils::H256> = BlockRef::from_hash(best_block.read().await.0.hash());
+									nonce = get_account_nonce(&api, block_ref, &sender).await;
 									
-							// 		// at most 1 second
-							// 		sleep_time_ms = 1000u64.saturating_sub(now.elapsed().as_millis() as u64);
-							// 		continue
-							// 	}
-							// };
+									// at most 1 second
+									sleep_time_ms = worker_sleep.saturating_sub(now.elapsed().as_millis() as u64);
+									continue
+								}
+							};
 
 							// log::debug!("Watching the tx");
 							// // Wait up to 1s.
-							// while let Ok(Some(a)) = timeout(Duration::from_millis(2000), watch.next()).await {
+							// while let Some(a) = watch.next().await {
 							// 	// Default value for retrying a transaction if failed.
 							// 	sleep_time_ms = 100;
 							// 	match a {
@@ -304,21 +291,21 @@ fn main() -> Result<(), Box<dyn Error>> {
 							// 				break;
 							// 			},
 							// 			subxt::tx::TxStatus::Broadcasted { num_peers } =>
-							// 				log::error!("BROADCASTED TO {num_peers}"),
+							// 				log::debug!("BROADCASTED TO {num_peers}"),
 							// 			subxt::tx::TxStatus::NoLongerInBestBlock => {
-							// 				log::error!("NO LONGER IN BEST BLOCK");
+							// 				log::debug!("NO LONGER IN BEST BLOCK");
 							// 			},
 							// 			subxt::tx::TxStatus::InBestBlock(_) => {
 							// 				log::debug!("IN BEST BLOCK");
 											
 							// 			},
 							// 			subxt::tx::TxStatus::InFinalizedBlock(_) =>
-							// 				log::warn!("IN FINALIZED BLOCK"),
+							// 				log::debug!("IN FINALIZED BLOCK"),
 							// 			subxt::tx::TxStatus::Error { message } =>
-							// 				log::warn!("ERROR: {message}"),
+							// 				log::debug!("ERROR: {message}"),
 							// 			subxt::tx::TxStatus::Invalid { message } |
 							// 			subxt::tx::TxStatus::Dropped { message } => {
-							// 				log::warn!("INVALID/DROPPED: {message}");
+							// 				log::debug!("INVALID/DROPPED: {message}");
 							// 				let block_ref: BlockRef<subxt::utils::H256> = BlockRef::from_hash(best_block.read().await.0.hash());
 							// 				nonce = get_account_nonce(&api, block_ref, &sender).await;
 							// 				break;
@@ -332,7 +319,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 							sent.fetch_add(1, Ordering::SeqCst);
 							// Determine how much left to sleep, we need to retry in 1000ms (backoff)
-							sleep_time_ms = 1000u64.saturating_sub(now.elapsed().as_millis() as u64);
+							sleep_time_ms = worker_sleep.saturating_sub(now.elapsed().as_millis() as u64);
 							nonce += 1;
 						}
 						
