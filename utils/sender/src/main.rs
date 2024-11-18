@@ -5,7 +5,7 @@ use log::*;
 use sender_lib::{connect, sign_balance_transfers};
 use core::time;
 use std::{
-	collections::HashMap,
+	collections::{HashMap, VecDeque},
 	error::Error,
 	sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering}, time::Instant,
 };
@@ -197,7 +197,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 				loop {
 					sent.store(0, Ordering::SeqCst);
 					in_block.store(0, Ordering::SeqCst);
-					
+
 					// Spawn 1 task per sender.
 					for i in 0..n_tx_sender {
 						let in_block = in_block.clone();
@@ -330,15 +330,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 					let sent_a = sent.clone();
 					let in_block_a = in_block.clone();
 
-					// Tx pool drops transactions, or re-orgs happen.
-					// This ensures we don't stop generating transactions because 
-					// number of sent transactions is way higher then what we saw in blocks.
-					// if round % 20 == 0 {
-					// 	log::info!("New round begins");
-					// 	sent.store(0, Ordering::SeqCst);
-					// 	in_block.store(0, Ordering::SeqCst);
-					// }
-					for round in 0..10 {
+					let mut tps_window = VecDeque::new(); 
+
+					for round in 0..100 {
 						if let Ok(Some(new_best_block)) = best_block_stream.try_next().await {
 							*best_block.write().await = (new_best_block, Instant::now());
 						} else {
@@ -357,7 +351,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 									}
 								}
 							}
-							
 						}
 
 						let best_block = &best_block.read().await.0;
@@ -388,15 +381,31 @@ fn main() -> Result<(), Box<dyn Error>> {
 						}
 
 						in_block.fetch_add(txcount , Ordering::SeqCst);
+						let tps = txcount * 1000 / block_time.as_millis() as u64;
+						
+						tps_window.push_back(tps as usize);
 
-						log::info!("TPS: {} \t| Sent/Inblock: {}/{} \t| Best: {} | tx_count = {} | block_time = {:?}", txcount * 1000 / block_time.as_millis() as u64, sent.load(Ordering::SeqCst),  in_block.load(Ordering::SeqCst), best_block.number(), txcount, block_time);
+						// A window of size 3
+						if tps_window.len() > 3 {
+							tps_window.pop_front();
+							let avg_tps = tps_window.iter().sum::<usize>();
+	
+							if avg_tps < args.tps / 3 {
+								log::warn!("TPS dropped by 60% ...");
+								break;
+							}
+						}
+
+						let avg_tps = tps_window.iter().sum::<usize>() / tps_window.len();
+
+						log::info!("TPS: {} \t | Avg: {} \t | Sent/Exec: {}/{} | Best: {} | txs = {} | block time = {:?}", tps, avg_tps, sent.load(Ordering::SeqCst),  in_block.load(Ordering::SeqCst), best_block.number(), txcount, block_time);
 					}
 
 					// Restarting
 					for handle in handles.iter() {
 						handle.abort();
 					}
-					log::info!("New round begins");
+					log::info!("Restarting senders");
 				}
 				
 			});
