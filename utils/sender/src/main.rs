@@ -12,7 +12,7 @@ use std::{
 // use subxt::{ext::sp_core::Pair, utils::AccountId32, OnlineClient, PolkadotConfig};
 
 use subxt::{
-	backend::legacy::rpc_methods::Block, blocks::BlockRef, config::polkadot::PolkadotExtrinsicParamsBuilder as Params, dynamic::Value, ext::sp_core::{sr25519::Pair as SrPair, Pair}, tx::{PairSigner, SubmittableExtrinsic}, OnlineClient, PolkadotConfig
+	backend::legacy::rpc_methods::Block, blocks::BlockRef, config::polkadot::PolkadotExtrinsicParamsBuilder as Params, dynamic::Value, ext::sp_core::{sr25519::Pair as SrPair, Pair}, tx::{PairSigner, SubmittableExtrinsic, TransactionInvalid, ValidationResult}, OnlineClient, PolkadotConfig
 };
 use tokio::{sync::{Mutex, RwLock, Semaphore}, time::timeout};
 
@@ -27,10 +27,6 @@ struct Args {
 	#[arg(long)]
 	node_url: String,
 
-	/// Set to the number of desired threads (default: 1). If set > 1 the program will spawn multiple threads to send transactions in parallel.
-	#[arg(long, default_value_t = 1)]
-	threads: usize,
-
 	/// Total number of senders
 	#[arg(long)]
 	total_senders: Option<usize>,
@@ -41,7 +37,7 @@ struct Args {
 
 	/// Total number of pre-funded accounts (on funded-accounts.json).
 	#[arg(long)]
-	num: usize,
+	tps: usize,
 }
 
 // FIXME: This assumes that all the chains supported by sTPS use this `AccountInfo` type. Currently,
@@ -101,7 +97,7 @@ impl Error for AccountError {}
 // 	Ok(())
 // }
 use jsonrpsee_client_transport::ws::WsTransportClientBuilder;
-use jsonrpsee_core::client::Client;
+use jsonrpsee_core::client::{async_client::PingConfig, Client};
 use std::sync::Arc;
 use subxt::backend::legacy::LegacyBackend;
 use subxt::backend::unstable::UnstableBackend;
@@ -138,20 +134,28 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 	let args = Args::parse();
 
-	if args.threads < 1 {
-		panic!("Number of threads must be 1, or greater!")
-	}
-
-	// In case the optional total_senders argument is not passed for single-threaded mode,
-	// we must make sure that we split the work evenly between threads for multi-threaded mode.
-	let n_tx_sender = match args.total_senders {
-		Some(tot_s) => args.num / tot_s,
-		None => args.num / args.threads,
-	};
+	// Assume number of senders equal to TPS if not specified.
+	let n_tx_sender = args.total_senders.unwrap_or(args.tps);
+	let worker_sleep = (1_000f64 * (n_tx_sender as f64 / args.tps as f64)) as u64;
 
 	let sender_accounts = funder_lib::derive_accounts(n_tx_sender, SENDER_SEED.to_owned());
 	let receiver_accounts = funder_lib::derive_accounts(n_tx_sender, RECEIVER_SEED.to_owned());
-	let node_url = url::Url::parse(&args.node_url)?;
+	
+
+	async fn create_api(node_url: String) -> OnlineClient<PolkadotConfig> {
+		let node_url = url::Url::parse(&node_url).unwrap();
+		let (node_sender, node_receiver) =
+			WsTransportClientBuilder::default().build(node_url.clone()).await.unwrap();
+		let client = Client::builder()
+			.request_timeout(Duration::from_secs(10))
+			.max_buffer_capacity_per_subscription(16 * 1024 * 1024)
+			.enable_ws_ping(PingConfig::new().ping_interval(Duration::from_secs(10)))
+			.set_tcp_no_delay(true)
+			.max_concurrent_requests( 1024 * 10)
+			.build_with_tokio(node_sender, node_receiver);
+		let backend = Arc::new(LegacyBackend::builder().build(client));
+		OnlineClient::from_backend(backend).await.unwrap()
+	}
 
 	loop {
 		tokio::runtime::Builder::new_multi_thread()
@@ -159,34 +163,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 			.build()
 			.unwrap()
 			.block_on(async {
-				let (node_sender, node_receiver) =
-					WsTransportClientBuilder::default().build(node_url.clone()).await.unwrap();
-				let client = Client::builder()
-					.request_timeout(Duration::from_secs(3600))
-					.max_buffer_capacity_per_subscription(4096 * 1024)
-					.max_concurrent_requests(2 * 1024 * 1024)
-					.build_with_tokio(node_sender, node_receiver);
-				let backend = LegacyBackend::builder().build(client);
-
-				let api = OnlineClient::from_backend(Arc::new(backend)).await.unwrap();
+				let node_url = args.node_url.clone();
+				let api = create_api(node_url.clone()).await;
 
 				// Subscribe to best block stream
 				let mut best_block_stream  = api.blocks().subscribe_best().await.expect("Subscribe to best block failed");
 				let best_block = Arc::new(RwLock::new((best_block_stream.next().await.unwrap().unwrap(), Instant::now())));
 
-				let tx_templates = receiver_accounts
-					.iter()
-					.map(|a| {
-						subxt::dynamic::tx(
-							"Balances",
-							"transfer_keep_alive",
-							vec![
-								Value::unnamed_variant("Id", [Value::from_bytes(a.public())]),
-								Value::u128(1u32.into()),
-							],
-						)
-					})
-					.collect::<Vec<_>>();
+				log::info!("Current best block: {}", best_block.read().await.0.number() );
 
 				let sender_signers = sender_accounts
 					.iter()
@@ -202,11 +186,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 					.map(|a| get_account_nonce(&api, block_ref.clone(),a).map(|n| (a.public(), n)))
 					.collect::<FuturesUnordered<_>>();
 
-				let noncemap = Arc::new(Mutex::new(
-					futs.collect::<Vec<_>>().await.into_iter().collect::<HashMap<_, _>>(),
-				));
-				info!("Got nonces in {:?}", now.elapsed());
-
 				info!("Starting sender");
 
 				// Overall metrics that we use to throttle
@@ -215,123 +194,205 @@ fn main() -> Result<(), Box<dyn Error>> {
 				// Number of in block transactions.
 				let in_block = Arc::new(AtomicU64::default());
 
+				let mut handles = Vec::new();
 
 				// Spawn 1 task per sender.
 				for i in 0..n_tx_sender {
 					let in_block = in_block.clone();
 					let sent = sent.clone();
 
-					let noncemap = noncemap.clone();
-					
-					let fapi = api.clone();
+					let node_url = node_url.clone();
+				
 					let sender = sender_accounts[i].clone();
 					let signer = sender_signers[i].clone();
-					let tx_payload = tx_templates[i].clone();
-					let mut nonce = {
-						let lock = noncemap.lock().await;
-						*lock.get(&sender.public()).unwrap()
-					};
+					
+
 					let best_block = best_block.clone();
 					let sent = sent.clone();
 					let in_block = in_block.clone();
 
+					// Use one API instance per 1/10 workers.
+					let api = if i % 200 == 0  {
+						create_api(node_url.clone()).await
+					} else {
+						api.clone()
+					};
+
+					let receiver = receiver_accounts[i].clone();
+
+					// TODO: Fix future transaction problem ....
 					let task = async move {
-						let mut sleep_time_ms = 0u64;
+						let mut sleep_time_ms = 0u64;	
+						let block_ref: BlockRef<subxt::utils::H256> = BlockRef::from_hash(best_block.read().await.0.hash());
+						let mut nonce = get_account_nonce(&api, block_ref.clone(), &sender).await;
+
+
 						loop {
-							if sent.load(Ordering::SeqCst) > in_block.load(Ordering::SeqCst) + 12000 {
+							if sent.load(Ordering::SeqCst) > in_block.load(Ordering::SeqCst) + 12000 { // TODO: rpc pool size
 								// Wait 10ms and check again.
 								tokio::time::sleep(std::time::Duration::from_millis(10)).await;
 								// Substract above sleep from TPS delay.
 								sleep_time_ms = sleep_time_ms.saturating_sub(10);
 								continue
 							}
-							
+
 							// Target a rate of 1TPS per worker, so we wait.
 							tokio::time::sleep(std::time::Duration::from_millis(sleep_time_ms)).await;
-							
+							let now = Instant::now();
+							log::debug!("Sender {} using nonce {}", i, nonce);
+
+							let tx_payload = 
+								subxt::dynamic::tx(
+									"Balances",
+									"transfer_keep_alive",
+									vec![
+										Value::unnamed_variant("Id", [Value::from_bytes(receiver.public())]),
+										Value::u128(1u32.into()),
+									],
+								);
+							// log::info!("Sender {} using nonce {}", i, nonce);
 							let tx_params = Params::new().nonce(nonce as u64).build();
 
-							let now = Instant::now();
-
-							let tx = fapi
+							let tx = api
 								.tx()
 								.create_signed_offline(&tx_payload, &signer, tx_params)
 								.unwrap();
 
-							let mut watch = match tx.submit_and_watch().await {
-								Ok(watch) => watch,
-								Err(err) => {
-									// log::error!("{:?}", err);
-									let block_ref: BlockRef<subxt::utils::H256> = BlockRef::from_hash(best_block.read().await.0.hash());
-									nonce = get_account_nonce(&fapi, block_ref, &sender).await;
-									
-									// 1 second
-									sleep_time_ms = 1_000;
-									continue
-								}
+							if let Ok(ValidationResult::Invalid(_)) = tx.validate().await {
+								log::info!("Bad transaction avoided");
+
+								let block_ref: BlockRef<subxt::utils::H256> = BlockRef::from_hash(best_block.read().await.0.hash());
+								nonce = get_account_nonce(&api, block_ref, &sender).await;
+								sleep_time_ms = 0;
+								continue
+							}
+							
+							let Ok(result) = timeout(Duration::from_millis(500), tx.submit_and_watch()).await else {
+								// Timeout, retry in 10ms.
+								sleep_time_ms = 10;
+								log::debug!("Timeout(500ms) submitting transaction");
+								continue;
 							};
 
-							while let Some(a) = watch.next().await {
-								// Default value for retrying a transaction if failed.
-								sleep_time_ms = 100;
-								match a {
-									Ok(st) => match st {
-										subxt::tx::TxStatus::Validated => {
-											log::debug!("VALIDATED");
-											sent.fetch_add(1, Ordering::SeqCst);
+							// let mut watch = match result{
+							// 	Ok(watch) => watch,
+							// 	Err(err) => {
+							// 		log::debug!("{:?}", err);
+							// 		let block_ref: BlockRef<subxt::utils::H256> = BlockRef::from_hash(best_block.read().await.0.hash());
+							// 		nonce = get_account_nonce(&api, block_ref, &sender).await;
+									
+							// 		// at most 1 second
+							// 		sleep_time_ms = 1000u64.saturating_sub(now.elapsed().as_millis() as u64);
+							// 		continue
+							// 	}
+							// };
 
-											// Determine how much left to sleep
-											sleep_time_ms = 1_000u64.saturating_sub(now.elapsed().as_millis() as u64);
-											nonce += 1;
-											break;
-										},
-										subxt::tx::TxStatus::Broadcasted { num_peers } =>
-											log::error!("BROADCASTED TO {num_peers}"),
-										subxt::tx::TxStatus::NoLongerInBestBlock => {
-											log::error!("NO LONGER IN BEST BLOCK");
-										},
-										subxt::tx::TxStatus::InBestBlock(_) => {
-											log::debug!("IN BEST BLOCK");
+							// log::debug!("Watching the tx");
+							// // Wait up to 1s.
+							// while let Ok(Some(a)) = timeout(Duration::from_millis(2000), watch.next()).await {
+							// 	// Default value for retrying a transaction if failed.
+							// 	sleep_time_ms = 100;
+							// 	match a {
+							// 		Ok(st) => match st {
+							// 			subxt::tx::TxStatus::Validated => {
+							// 				log::debug!("VALIDATED");
+							// 				sent.fetch_add(1, Ordering::SeqCst);
+
+							// 				// Determine how much left to sleep
+							// 				sleep_time_ms = 1_000u64.saturating_sub(now.elapsed().as_millis() as u64);
+							// 				nonce += 1;
+							// 				break;
+							// 			},
+							// 			subxt::tx::TxStatus::Broadcasted { num_peers } =>
+							// 				log::error!("BROADCASTED TO {num_peers}"),
+							// 			subxt::tx::TxStatus::NoLongerInBestBlock => {
+							// 				log::error!("NO LONGER IN BEST BLOCK");
+							// 			},
+							// 			subxt::tx::TxStatus::InBestBlock(_) => {
+							// 				log::debug!("IN BEST BLOCK");
 											
-										},
-										subxt::tx::TxStatus::InFinalizedBlock(_) =>
-											log::warn!("IN FINALIZED BLOCK"),
-										subxt::tx::TxStatus::Error { message } =>
-											log::warn!("ERROR: {message}"),
-										subxt::tx::TxStatus::Invalid { message } |
-										subxt::tx::TxStatus::Dropped { message } => {
-											log::debug!("INVALID/DROPPED: {message}");
-											let block_ref: BlockRef<subxt::utils::H256> = BlockRef::from_hash(best_block.read().await.0.hash());
-											nonce = get_account_nonce(&fapi, block_ref, &sender).await;
-											break;
-										},
-									},
-									Err(e) => {
-										warn!("Error status {:?}", e);
-									},
-								}
-							}
+							// 			},
+							// 			subxt::tx::TxStatus::InFinalizedBlock(_) =>
+							// 				log::warn!("IN FINALIZED BLOCK"),
+							// 			subxt::tx::TxStatus::Error { message } =>
+							// 				log::warn!("ERROR: {message}"),
+							// 			subxt::tx::TxStatus::Invalid { message } |
+							// 			subxt::tx::TxStatus::Dropped { message } => {
+							// 				log::warn!("INVALID/DROPPED: {message}");
+							// 				let block_ref: BlockRef<subxt::utils::H256> = BlockRef::from_hash(best_block.read().await.0.hash());
+							// 				nonce = get_account_nonce(&api, block_ref, &sender).await;
+							// 				break;
+							// 			},
+							// 		},
+							// 		Err(e) => {
+							// 			warn!("Error status {:?}", e);
+							// 		},
+							// 	}
+							// }
 
-							// Determine how much left to sleep, we need to retry in 100ms (backoff)
-							sleep_time_ms = sleep_time_ms.saturating_sub(now.elapsed().as_millis() as u64);
+							sent.fetch_add(1, Ordering::SeqCst);
+							// Determine how much left to sleep, we need to retry in 1000ms (backoff)
+							sleep_time_ms = 1000u64.saturating_sub(now.elapsed().as_millis() as u64);
+							nonce += 1;
 						}
 						
 					};
-					tokio::spawn(task);
+					handles.push(tokio::spawn(task));
 				}
 
+				log::info!("All senders started");
+
+				let sent_a = sent.clone();
+				let in_block_a = in_block.clone();
+
+				tokio::spawn(async move {
+					loop {
+						tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+						log::info!("New round begins");
+						sent_a.store(0, Ordering::SeqCst);
+						in_block_a.store(0, Ordering::SeqCst);
+					}
+				});
+				
+
+				// Tx pool drops transactions, or re-orgs happen.
+				// This ensures we don't stop generating transactions because 
+				// number of sent transactions is way higher then what we saw in blocks.
+				// if round % 20 == 0 {
+				// 	log::info!("New round begins");
+				// 	sent.store(0, Ordering::SeqCst);
+				// 	in_block.store(0, Ordering::SeqCst);
+				// }
 				let mut timestamp = Duration::from_micros(0);
 				let mut block_time = Duration::from_micros(0);
-				loop {
-					if let Ok(Some(maybe_best_block)) = best_block_stream.try_next().await {
-						*best_block.write().await = (maybe_best_block, Instant::now());
+				for round in 0..u32::MAX {
+					if let Ok(Some(new_best_block)) = best_block_stream.try_next().await {
+						*best_block.write().await = (new_best_block, Instant::now());
 					} else {
-						log::error!("Best block subscription lost");
-						break
+						log::error!("Best block subscription lost, trying to reconnect ... ");
+						
+						loop {
+							match api.blocks().subscribe_best().await {
+								Ok(fresh_best_block_stream) => {
+									best_block_stream = fresh_best_block_stream;
+									log::info!("Reconnected.");
+									break;
+								}
+								Err(e) => {
+									log::error!("Reconnect failed: {:?} ", e);
+									tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+								}
+							}
+						}
+						
 					}
 
 					let best_block = &best_block.read().await.0;
-					let extrinsics = best_block.extrinsics().await.expect("Get best block extrinsics");
+					
+					let Ok(extrinsics) = best_block.extrinsics().await else {
+						// Most likely, need to reconnect to RPC.
+						continue
+					};
 
 					let mut txcount = 0;
 
