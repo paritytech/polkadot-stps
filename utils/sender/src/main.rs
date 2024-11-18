@@ -138,10 +138,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 	let n_tx_sender = args.total_senders.unwrap_or(args.tps);
 	let worker_sleep = (1_000f64 * (n_tx_sender as f64 / args.tps as f64)) as u64;
 
+	log::info!("worker_sleep = {}",worker_sleep);
+
 	let sender_accounts = funder_lib::derive_accounts(n_tx_sender, SENDER_SEED.to_owned());
 	let receiver_accounts = funder_lib::derive_accounts(n_tx_sender, RECEIVER_SEED.to_owned());
 	
-
 	async fn create_api(node_url: String) -> OnlineClient<PolkadotConfig> {
 		let node_url = url::Url::parse(&node_url).unwrap();
 		let (node_sender, node_receiver) =
@@ -181,7 +182,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 				let now = std::time::Instant::now();
 				let block_ref: BlockRef<subxt::utils::H256> = BlockRef::from_hash(best_block.read().await.0.hash());
 
-				info!("Starting sender");
+				info!("Starting senders");
 
 				// Overall metrics that we use to throttle
 				// Transactions sent since last block
@@ -190,221 +191,215 @@ fn main() -> Result<(), Box<dyn Error>> {
 				let in_block = Arc::new(AtomicU64::default());
 
 				let mut handles = Vec::new();
-
-				// Spawn 1 task per sender.
-				for i in 0..n_tx_sender {
-					let in_block = in_block.clone();
-					let sent = sent.clone();
-
-					let node_url = node_url.clone();
-				
-					let sender = sender_accounts[i].clone();
-					let signer = sender_signers[i].clone();
-					
-
-					let best_block = best_block.clone();
-					let sent = sent.clone();
-					let in_block = in_block.clone();
-
-					// Use one API instance per 1/10 workers.
-					let api = if i % 500 == 0  {
-						create_api(node_url.clone()).await
-					} else {
-						api.clone()
-					};
-
-					let receiver = receiver_accounts[i].clone();
-
-					// TODO: Fix future transaction problem ....
-					let task = async move {
-						let mut sleep_time_ms = 0u64;	
-						let block_ref: BlockRef<subxt::utils::H256> = BlockRef::from_hash(best_block.read().await.0.hash());
-						let mut nonce = get_account_nonce(&api, block_ref.clone(), &sender).await;
-
-						loop {
-							if sent.load(Ordering::SeqCst) > in_block.load(Ordering::SeqCst) + 12000 { // TODO: rpc pool size
-								// Wait 10ms and check again.
-								tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-								// Substract above sleep from TPS delay.
-								sleep_time_ms = sleep_time_ms.saturating_sub(10);
-								continue
-							}
-
-							// Target a rate of 1TPS per worker, so we wait.
-							tokio::time::sleep(std::time::Duration::from_millis(sleep_time_ms)).await;
-							let now = Instant::now();
-							log::debug!("Sender {} using nonce {}", i, nonce);
-
-							let tx_payload = 
-								subxt::dynamic::tx(
-									"Balances",
-									"transfer_keep_alive",
-									vec![
-										Value::unnamed_variant("Id", [Value::from_bytes(receiver.public())]),
-										Value::u128(1u32.into()),
-									],
-								);
-							// log::info!("Sender {} using nonce {}", i, nonce);
-							let tx_params = Params::new().nonce(nonce as u64).build();
-
-							let tx = api
-								.tx()
-								.create_signed_offline(&tx_payload, &signer, tx_params)
-								.unwrap();
-
-							// if let Ok(ValidationResult::Invalid(_)) = tx.validate().await {
-							// 	log::info!("Bad transaction avoided");
-
-							// 	let block_ref: BlockRef<subxt::utils::H256> = BlockRef::from_hash(best_block.read().await.0.hash());
-							// 	nonce = get_account_nonce(&api, block_ref, &sender).await;
-							// 	sleep_time_ms = 0;
-							// 	continue
-							// }
-							
-							let mut watch = match tx.submit_and_watch().await {
-								Ok(watch) => watch,
-								Err(err) => {
-									log::debug!("{:?}", err);
-									let block_ref: BlockRef<subxt::utils::H256> = BlockRef::from_hash(best_block.read().await.0.hash());
-									nonce = get_account_nonce(&api, block_ref, &sender).await;
-									
-									// at most 1 second
-									sleep_time_ms = worker_sleep.saturating_sub(now.elapsed().as_millis() as u64);
-									continue
-								}
-							};
-
-							// log::debug!("Watching the tx");
-							// // Wait up to 1s.
-							// while let Some(a) = watch.next().await {
-							// 	// Default value for retrying a transaction if failed.
-							// 	sleep_time_ms = 100;
-							// 	match a {
-							// 		Ok(st) => match st {
-							// 			subxt::tx::TxStatus::Validated => {
-							// 				log::debug!("VALIDATED");
-							// 				sent.fetch_add(1, Ordering::SeqCst);
-
-							// 				// Determine how much left to sleep
-							// 				sleep_time_ms = 1_000u64.saturating_sub(now.elapsed().as_millis() as u64);
-							// 				nonce += 1;
-							// 				break;
-							// 			},
-							// 			subxt::tx::TxStatus::Broadcasted { num_peers } =>
-							// 				log::debug!("BROADCASTED TO {num_peers}"),
-							// 			subxt::tx::TxStatus::NoLongerInBestBlock => {
-							// 				log::debug!("NO LONGER IN BEST BLOCK");
-							// 			},
-							// 			subxt::tx::TxStatus::InBestBlock(_) => {
-							// 				log::debug!("IN BEST BLOCK");
-											
-							// 			},
-							// 			subxt::tx::TxStatus::InFinalizedBlock(_) =>
-							// 				log::debug!("IN FINALIZED BLOCK"),
-							// 			subxt::tx::TxStatus::Error { message } =>
-							// 				log::debug!("ERROR: {message}"),
-							// 			subxt::tx::TxStatus::Invalid { message } |
-							// 			subxt::tx::TxStatus::Dropped { message } => {
-							// 				log::debug!("INVALID/DROPPED: {message}");
-							// 				let block_ref: BlockRef<subxt::utils::H256> = BlockRef::from_hash(best_block.read().await.0.hash());
-							// 				nonce = get_account_nonce(&api, block_ref, &sender).await;
-							// 				break;
-							// 			},
-							// 		},
-							// 		Err(e) => {
-							// 			warn!("Error status {:?}", e);
-							// 		},
-							// 	}
-							// }
-
-							sent.fetch_add(1, Ordering::SeqCst);
-							// Determine how much left to sleep, we need to retry in 1000ms (backoff)
-							sleep_time_ms = worker_sleep.saturating_sub(now.elapsed().as_millis() as u64);
-							nonce += 1;
-						}
-						
-					};
-					handles.push(tokio::spawn(task));
-				}
-
-				log::info!("All senders started");
-
-				let sent_a = sent.clone();
-				let in_block_a = in_block.clone();
-
-				tokio::spawn(async move {
-					loop {
-						tokio::time::sleep(std::time::Duration::from_secs(30)).await;
-						log::info!("New round begins");
-						sent_a.store(0, Ordering::SeqCst);
-						in_block_a.store(0, Ordering::SeqCst);
-					}
-				});
-				
-
-				// Tx pool drops transactions, or re-orgs happen.
-				// This ensures we don't stop generating transactions because 
-				// number of sent transactions is way higher then what we saw in blocks.
-				// if round % 20 == 0 {
-				// 	log::info!("New round begins");
-				// 	sent.store(0, Ordering::SeqCst);
-				// 	in_block.store(0, Ordering::SeqCst);
-				// }
 				let mut timestamp = Duration::from_micros(0);
 				let mut block_time = Duration::from_micros(0);
-				for round in 0..u32::MAX {
-					if let Ok(Some(new_best_block)) = best_block_stream.try_next().await {
-						*best_block.write().await = (new_best_block, Instant::now());
-					} else {
-						log::error!("Best block subscription lost, trying to reconnect ... ");
+
+				loop {
+					sent.store(0, Ordering::SeqCst);
+					in_block.store(0, Ordering::SeqCst);
+					
+					// Spawn 1 task per sender.
+					for i in 0..n_tx_sender {
+						let in_block = in_block.clone();
+						let sent = sent.clone();
+
+						let node_url = node_url.clone();
+
+						let sender = sender_accounts[i].clone();
+						let signer = sender_signers[i].clone();
 						
-						loop {
-							match api.blocks().subscribe_best().await {
-								Ok(fresh_best_block_stream) => {
-									best_block_stream = fresh_best_block_stream;
-									log::info!("Reconnected.");
-									break;
+
+						let best_block = best_block.clone();
+						let sent = sent.clone();
+						let in_block = in_block.clone();
+
+						// Use one API instance per 1/10 workers.
+						let api = if i % 3000 == 0  {
+							create_api(node_url.clone()).await
+						} else {
+							api.clone()
+						};
+
+						let receiver = receiver_accounts[i].clone();
+
+						// TODO: Fix future transaction problem ....
+						let task = async move {
+							let mut sleep_time_ms = 0u64;	
+							let block_ref: BlockRef<subxt::utils::H256> = BlockRef::from_hash(best_block.read().await.0.hash());
+							let mut nonce = get_account_nonce(&api, block_ref.clone(), &sender).await;
+
+							loop {
+								if sent.load(Ordering::SeqCst) > in_block.load(Ordering::SeqCst) + 12000 { // TODO: rpc pool size
+									// Wait 10ms and check again.
+									tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+									// Substract above sleep from TPS delay.
+									sleep_time_ms = sleep_time_ms.saturating_sub(10);
+									continue
 								}
-								Err(e) => {
-									log::error!("Reconnect failed: {:?} ", e);
-									tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-								}
+
+								// Target a rate of 1TPS per worker, so we wait.
+								tokio::time::sleep(std::time::Duration::from_millis(sleep_time_ms)).await;
+								let now = Instant::now();
+								log::debug!("Sender {} using nonce {}", i, nonce);
+
+								let tx_payload = 
+									subxt::dynamic::tx(
+										"Balances",
+										"transfer_keep_alive",
+										vec![
+											Value::unnamed_variant("Id", [Value::from_bytes(receiver.public())]),
+											Value::u128(1u32.into()),
+										],
+									);
+								log::debug!("Sender {} using nonce {}", i, nonce);
+								let tx_params = Params::new().nonce(nonce as u64).build();
+
+								let tx = api
+									.tx()
+									.create_signed_offline(&tx_payload, &signer, tx_params)
+									.unwrap();
+
+								let mut watch = match tx.submit_and_watch().await {
+									Ok(watch) => watch,
+									Err(err) => {
+										log::debug!("{:?}", err);
+										let block_ref: BlockRef<subxt::utils::H256> = BlockRef::from_hash(best_block.read().await.0.hash());
+										nonce = get_account_nonce(&api, block_ref, &sender).await;
+										
+										// at most 1 second
+										sleep_time_ms = worker_sleep.saturating_sub(now.elapsed().as_millis() as u64);
+										continue
+									}
+								};
+
+								// log::debug!("Watching the tx");
+								// // Wait up to 1s.
+								// while let Some(a) = watch.next().await {
+								// 	// Default value for retrying a transaction if failed.
+								// 	sleep_time_ms = 100;
+								// 	match a {
+								// 		Ok(st) => match st {
+								// 			subxt::tx::TxStatus::Validated => {
+								// 				log::debug!("VALIDATED");
+								// 				sent.fetch_add(1, Ordering::SeqCst);
+
+								// 				// Determine how much left to sleep
+								// 				sleep_time_ms = 1_000u64.saturating_sub(now.elapsed().as_millis() as u64);
+								// 				nonce += 1;
+								// 				break;
+								// 			},
+								// 			subxt::tx::TxStatus::Broadcasted { num_peers } =>
+								// 				log::debug!("BROADCASTED TO {num_peers}"),
+								// 			subxt::tx::TxStatus::NoLongerInBestBlock => {
+								// 				log::debug!("NO LONGER IN BEST BLOCK");
+								// 			},
+								// 			subxt::tx::TxStatus::InBestBlock(_) => {
+								// 				log::debug!("IN BEST BLOCK");
+												
+								// 			},
+								// 			subxt::tx::TxStatus::InFinalizedBlock(_) =>
+								// 				log::debug!("IN FINALIZED BLOCK"),
+								// 			subxt::tx::TxStatus::Error { message } =>
+								// 				log::debug!("ERROR: {message}"),
+								// 			subxt::tx::TxStatus::Invalid { message } |
+								// 			subxt::tx::TxStatus::Dropped { message } => {
+								// 				log::debug!("INVALID/DROPPED: {message}");
+								// 				let block_ref: BlockRef<subxt::utils::H256> = BlockRef::from_hash(best_block.read().await.0.hash());
+								// 				nonce = get_account_nonce(&api, block_ref, &sender).await;
+								// 				break;
+								// 			},
+								// 		},
+								// 		Err(e) => {
+								// 			warn!("Error status {:?}", e);
+								// 		},
+								// 	}
+								// }
+
+								sent.fetch_add(1, Ordering::SeqCst);
+								// Determine how much left to sleep, we need to retry in 1000ms (backoff)
+								sleep_time_ms = worker_sleep.saturating_sub(now.elapsed().as_millis() as u64);
+								nonce += 1;
 							}
-						}
-						
+							
+						};
+						handles.push(tokio::spawn(task));
 					}
 
-					let best_block = &best_block.read().await.0;
-					
-					let Ok(extrinsics) = best_block.extrinsics().await else {
-						// Most likely, need to reconnect to RPC.
-						continue
-					};
+					log::info!("All senders started");
 
-					let mut txcount = 0;
+					let sent_a = sent.clone();
+					let in_block_a = in_block.clone();
 
-					for ex in extrinsics.iter() {
-						let Ok(ex) = ex else {
+					// Tx pool drops transactions, or re-orgs happen.
+					// This ensures we don't stop generating transactions because 
+					// number of sent transactions is way higher then what we saw in blocks.
+					// if round % 20 == 0 {
+					// 	log::info!("New round begins");
+					// 	sent.store(0, Ordering::SeqCst);
+					// 	in_block.store(0, Ordering::SeqCst);
+					// }
+					for round in 0..10 {
+						if let Ok(Some(new_best_block)) = best_block_stream.try_next().await {
+							*best_block.write().await = (new_best_block, Instant::now());
+						} else {
+							log::error!("Best block subscription lost, trying to reconnect ... ");
+							
+							loop {
+								match api.blocks().subscribe_best().await {
+									Ok(fresh_best_block_stream) => {
+										best_block_stream = fresh_best_block_stream;
+										log::info!("Reconnected.");
+										break;
+									}
+									Err(e) => {
+										log::error!("Reconnect failed: {:?} ", e);
+										tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+									}
+								}
+							}
+							
+						}
+
+						let best_block = &best_block.read().await.0;
+						
+						let Ok(extrinsics) = best_block.extrinsics().await else {
+							// Most likely, need to reconnect to RPC.
 							continue
 						};
 
-						match (ex.pallet_name().expect("pallet name"), ex.variant_name().expect("variant name")) {
-							("Timestamp", "set") => {
-								let new_timestamp = Duration::from_millis(codec::Compact::<u64>::decode(&mut &ex.field_bytes()[..]).expect("timestamp decodes").0);
-								block_time =  new_timestamp - timestamp;
-								timestamp = new_timestamp;
-							},
-							("Balances", "transfer_keep_alive") | ("Nfts", "transfer") => {
-								txcount += 1;
-							},
-							_ => (),
-						}
-					}
-			
-					in_block.fetch_add(txcount , Ordering::SeqCst);
+						let mut txcount = 0;
 
-					log::info!("TPS: {} \t| Sent/Inblock: {}/{} \t| Best: {} | tx_count = {} | block_time = {:?}", txcount * 1000 / block_time.as_millis() as u64, sent.load(Ordering::SeqCst),  in_block.load(Ordering::SeqCst), best_block.number(), txcount, block_time);
+						for ex in extrinsics.iter() {
+							let Ok(ex) = ex else {
+								continue
+							};
+
+							match (ex.pallet_name().expect("pallet name"), ex.variant_name().expect("variant name")) {
+								("Timestamp", "set") => {
+									let new_timestamp = Duration::from_millis(codec::Compact::<u64>::decode(&mut &ex.field_bytes()[..]).expect("timestamp decodes").0);
+									block_time =  new_timestamp - timestamp;
+									timestamp = new_timestamp;
+								},
+								("Balances", "transfer_keep_alive") | ("Nfts", "transfer") => {
+									txcount += 1;
+								},
+								_ => (),
+							}
+						}
+
+						in_block.fetch_add(txcount , Ordering::SeqCst);
+
+						log::info!("TPS: {} \t| Sent/Inblock: {}/{} \t| Best: {} | tx_count = {} | block_time = {:?}", txcount * 1000 / block_time.as_millis() as u64, sent.load(Ordering::SeqCst),  in_block.load(Ordering::SeqCst), best_block.number(), txcount, block_time);
+					}
+
+					// Restarting
+					for handle in handles.iter() {
+						handle.abort();
+					}
+					log::info!("New round begins");
 				}
+				
 			});
 	}
 }
+
