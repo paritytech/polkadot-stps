@@ -5,6 +5,10 @@ on:
     branches:
       - s0me0ne/overhaul
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   stps-sender:
     name: Build docker image
