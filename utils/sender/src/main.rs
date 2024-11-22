@@ -303,7 +303,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 						}
 
 						in_block.fetch_add(txcount , Ordering::SeqCst);
-						let tps = txcount * 1000 / block_time.as_millis() as u64;
+						let btime = if block_time.is_zero() { 6000 } else { block_time.as_millis() };
+						let tps = txcount * 1000 / btime as u64;
 						tps_window.push_back(tps as usize);
 
 						// A window of size 3
