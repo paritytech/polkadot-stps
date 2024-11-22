@@ -42,6 +42,10 @@ struct Args {
 	/// Total number of pre-funded accounts (on funded-accounts.json).
 	#[arg(long)]
 	tps: usize,
+
+	/// Send in batch mode with the batch size this large.
+	#[arg(long, default_value_t = 0)]
+	batch: usize,
 }
 
 // FIXME: This assumes that all the chains supported by sTPS use this `AccountInfo` type. Currently,
@@ -90,8 +94,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 	let args = Args::parse();
 
 	// Assume number of senders equal to TPS if not specified.
+	let n_sender_tasks = if args.batch > 0 { args.tps / args.batch } else { args.tps };
 	let n_tx_sender = args.total_senders.unwrap_or(args.tps);
-	let worker_sleep = (1_000f64 * (n_tx_sender as f64 / args.tps as f64)) as u64;
+	let worker_sleep = (1_000f64 * (n_sender_tasks as f64 / args.tps as f64)) as u64;
 
 	log::info!("worker_sleep = {}", worker_sleep);
 
@@ -151,7 +156,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 					in_block.store(0, Ordering::SeqCst);
 
 					// Spawn 1 task per sender.
-					for i in 0..n_tx_sender {
+					for i in 0..n_sender_tasks {
 						let in_block = in_block.clone();
 						let sent = sent.clone();
 
@@ -163,13 +168,15 @@ fn main() -> Result<(), Box<dyn Error>> {
 						let in_block = in_block.clone();
 
 						let api = api.clone();
-						let receiver = receiver_accounts[i].clone();
+						let nrecv = if args.batch > 0 { args.batch } else { 1 };
+						let receiver_accounts = receiver_accounts.clone();
 
 						// TODO: Fix future transaction problem ....
 						let task = async move {
 							// Slowly ramp up
 							tokio::time::sleep(std::time::Duration::from_millis((i/8) as u64)).await;
 
+							let receivers = &receiver_accounts[i..i+nrecv];
 							let mut sleep_time_ms = 0u64;
 							let block_ref: BlockRef<subxt::utils::H256> = BlockRef::from_hash(best_block.read().await.0.hash());
 							let mut nonce = get_account_nonce(&api, block_ref.clone(), &sender).await;
@@ -188,15 +195,33 @@ fn main() -> Result<(), Box<dyn Error>> {
 								let now = Instant::now();
 								log::debug!("Sender {} using nonce {}", i, nonce);
 
-								let tx_payload =
+								let tx_payload = if args.batch > 0 {
+									let calls = (0..args.batch).map(|i|
+										subxt::dynamic::tx(
+											"Balances",
+											"transfer_keep_alive",
+											vec![
+												Value::unnamed_variant("Id", [Value::from_bytes(receivers[i].public())]),
+												Value::u128(1u32.into()),
+											],
+										).into_value()
+									).collect::<Vec<_>>();
+
+									subxt::dynamic::tx(
+										"Utility",
+										"batch",
+										vec![ Value::named_composite(vec![("calls", calls.into())]) ]
+									)
+								} else {
 									subxt::dynamic::tx(
 										"Balances",
 										"transfer_keep_alive",
 										vec![
-											Value::unnamed_variant("Id", [Value::from_bytes(receiver.public())]),
+											Value::unnamed_variant("Id", [Value::from_bytes(receivers[0].public())]),
 											Value::u128(1u32.into()),
 										],
-									);
+									)
+								};
 								log::debug!("Sender {} using nonce {}", i, nonce);
 								let tx_params = Params::new().nonce(nonce as u64).build();
 
