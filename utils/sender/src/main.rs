@@ -295,7 +295,17 @@ fn main() -> Result<(), Box<dyn Error>> {
 									block_time =  new_timestamp - timestamp;
 									timestamp = new_timestamp;
 								},
-								("Balances", "transfer_keep_alive") | ("Nfts", "transfer") => {
+								("Nfts", "transfer") => {
+									txcount += 1;
+								},
+								_ => (),
+							}
+						}
+
+						for ev in best_block.events().await.expect("Events are available").iter() {
+							let ev = ev.expect("Event is available");
+							match (ev.pallet_name(), ev.variant_name()) {
+								("Balances", "Transfer") => {
 									txcount += 1;
 								},
 								_ => (),
