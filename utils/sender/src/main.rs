@@ -96,7 +96,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 	// Assume number of senders equal to TPS if not specified.
 	let n_sender_tasks = if args.batch > 0 { args.tps / args.batch } else { args.tps };
 	let n_tx_sender = args.total_senders.unwrap_or(args.tps);
-	let worker_sleep = (1_000f64 * (n_sender_tasks as f64 / args.tps as f64)) as u64;
+	let worker_sleep = 1_000u64; //f64 * (n_sender_tasks as f64 / args.tps as f64)) as u64;
 
 	log::info!("worker_sleep = {}", worker_sleep);
 
