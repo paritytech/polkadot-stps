@@ -1,6 +1,8 @@
-use subxt::ext::sp_core::{sr25519::Pair as SrPair, Pair};
+use sp_core::Pair;
 
-pub fn derive_accounts(n: usize, seed: String) -> Vec<SrPair> {
+pub fn derive_accounts<T>(n: usize, seed: String) -> Vec<T>
+where T: Pair + Send + 'static
+{
 	let t = std::cmp::min(
 		n,
 		std::thread::available_parallelism().unwrap_or(1usize.try_into().unwrap()).get(),
@@ -17,8 +19,8 @@ pub fn derive_accounts(n: usize, seed: String) -> Vec<SrPair> {
 			chunk
 				.into_iter()
 				.map(move |i| {
-					let derivation = format!("{seed}/{i}");
-					<SrPair as Pair>::from_string(&derivation, None).unwrap()
+					let derivation = format!("{seed}{i}");
+					<T as Pair>::from_string(&derivation, None).unwrap()
 				})
 				.collect::<Vec<_>>()
 		}));
@@ -28,6 +30,5 @@ pub fn derive_accounts(n: usize, seed: String) -> Vec<SrPair> {
 		.into_iter()
 		.map(|h| h.join().unwrap())
 		.flatten()
-		// .map(|p| (p, funds))
 		.collect()
 }

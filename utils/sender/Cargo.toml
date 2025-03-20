@@ -19,6 +19,7 @@ pallet-balances.workspace = true
 url = "2.5"
 jsonrpsee-client-transport = "0.22"
 jsonrpsee-core = "0.22"
+sp-core.workspace = true
 
 [lib]
 name = "sender_lib"

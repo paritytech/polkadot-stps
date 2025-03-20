@@ -1,23 +1,24 @@
+use frame_system::Config;
 use futures::{stream::FuturesUnordered, StreamExt};
 use log::*;
 use std::{error::Error, time::Duration};
 use subxt::{
 	config::polkadot::PolkadotExtrinsicParamsBuilder as Params,
 	dynamic::Value,
-	ext::sp_core::{sr25519::Pair as SrPair, Pair},
-	tx::{PairSigner, SubmittableExtrinsic},
-	OnlineClient, PolkadotConfig,
+	tx::{Signer, SubmittableTransaction},
+	OnlineClient,
 };
+use sp_core::{sr25519::Pair as SrPair, Pair};
 
 /// Maximal number of connection attempts.
 const MAX_ATTEMPTS: usize = 10;
 /// Delay period between failed connection attempts.
 const RETRY_DELAY: Duration = Duration::from_secs(1);
 
-pub async fn connect(url: &str) -> Result<OnlineClient<PolkadotConfig>, Box<dyn Error>> {
+pub async fn connect<C: subxt::Config>(url: &str) -> Result<OnlineClient<C>, Box<dyn Error>> {
 	for i in 0..MAX_ATTEMPTS {
 		debug!("Attempt #{}: Connecting to {}", i, url);
-		match OnlineClient::<PolkadotConfig>::from_url(url).await {
+		match OnlineClient::<C>::from_url(url).await {
 			Ok(client) => {
 				debug!("Connection established to: {}", url);
 				return Ok(client);
@@ -34,18 +35,16 @@ pub async fn connect(url: &str) -> Result<OnlineClient<PolkadotConfig>, Box<dyn 
 	Err(err.into())
 }
 
-pub type SignedTx = SubmittableExtrinsic<PolkadotConfig, OnlineClient<PolkadotConfig>>;
+pub type SignedTx<C: subxt::Config> = SubmittableTransaction<C, OnlineClient<C>>;
 
-pub fn sign_txs<P, S, E>(
-	// api: OnlineClient<PolkadotConfig>,
+pub fn sign_txs<P, S, C>(
 	params: impl Iterator<Item = P>,
 	signer: S,
-	// txs: impl Iterator<Item = (SrPair, SrPair)>,
-) -> Result<Vec<SignedTx>, Box<dyn Error>>
+) -> Vec<SignedTx<C>>
 where
+	C: subxt::Config,
 	P: Send + 'static,
-	S: Fn(P) -> Result<SignedTx, E> + Send + Sync + 'static,
-	E: Error + Send + 'static,
+	S: Fn(P) -> SignedTx<C> + Send + Sync + 'static,
 {
 	let t = std::thread::available_parallelism().unwrap_or(1usize.try_into().unwrap()).get();
 
@@ -63,35 +62,35 @@ where
 			.push(std::thread::spawn(move || chunk.into_iter().map(&*signer).collect::<Vec<_>>()));
 	});
 
-	Ok(threads
+	threads
 		.into_iter()
 		.map(|h| h.join().unwrap())
 		.flatten()
-		.collect::<Result<Vec<_>, _>>()?)
+		.collect()
 }
 
-pub fn sign_balance_transfers(
-	api: OnlineClient<PolkadotConfig>,
-	pairs: impl Iterator<Item = ((SrPair, u64), SrPair)>,
-) -> Result<Vec<SignedTx>, Box<dyn Error>> {
-	sign_txs(pairs, move |((sender, nonce), receiver)| {
-		let signer = PairSigner::new(sender);
-		let tx_params = Params::new().nonce(nonce).build();
-		let tx_call = subxt::dynamic::tx(
-			"Balances",
-			"transfer_keep_alive",
-			vec![
-				Value::unnamed_variant("Id", [Value::from_bytes(receiver.public())]),
-				Value::u128(1u32.into()),
-			],
-		);
-		api.tx().create_signed_offline(&tx_call, &signer, tx_params)
-	})
-}
+// pub fn sign_balance_transfers<C>(
+// 	api: OnlineClient<PolkadotConfig>,
+// 	pairs: impl Iterator<Item = ((SrPair, u64), SrPair)>,
+// ) -> Result<Vec<SignedTx>, Box<dyn Error>> {
+// 	sign_txs(pairs, move |((sender, nonce), receiver)| {
+// 		let signer = PairSigner::new(sender);
+// 		let tx_params = Params::new().nonce(nonce).build();
+// 		let tx_call = subxt::dynamic::tx(
+// 			"Balances",
+// 			"transfer_keep_alive",
+// 			vec![
+// 				Value::unnamed_variant("Id", [Value::from_bytes(receiver.public())]),
+// 				Value::u128(1u32.into()),
+// 			],
+// 		);
+// 		api.tx().create_signed_offline(&tx_call, &signer, tx_params)
+// 	})
+// }
 
 /// Here the signed extrinsics are submitted.
-pub async fn submit_txs(
-	txs: Vec<SubmittableExtrinsic<PolkadotConfig, OnlineClient<PolkadotConfig>>>,
+pub async fn submit_txs<C: subxt::Config>(
+	txs: Vec<SubmittableTransaction<C, OnlineClient<C>>>,
 ) -> Result<(), Box<dyn Error>> {
 	let futs = txs.iter().map(|tx| tx.submit_and_watch()).collect::<FuturesUnordered<_>>();
 	let res = futs.collect::<Vec<_>>().await;
@@ -102,8 +101,8 @@ pub async fn submit_txs(
 		match a {
 			Ok(st) => match st {
 				subxt::tx::TxStatus::Validated => log::trace!("VALIDATED"),
-				subxt::tx::TxStatus::Broadcasted { num_peers } =>
-					log::trace!("BROADCASTED TO {num_peers}"),
+				subxt::tx::TxStatus::Broadcasted =>
+					log::trace!("BROADCASTED"),
 				subxt::tx::TxStatus::NoLongerInBestBlock => log::warn!("NO LONGER IN BEST BLOCK"),
 				subxt::tx::TxStatus::InBestBlock(_) => log::trace!("IN BEST BLOCK"),
 				subxt::tx::TxStatus::InFinalizedBlock(_) => log::trace!("IN FINALIZED BLOCK"),

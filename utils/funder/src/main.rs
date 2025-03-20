@@ -1,6 +1,6 @@
 use clap::Parser;
 use std::{error::Error, fs::File, path::PathBuf};
-use subxt::ext::sp_core::{crypto::Ss58Codec, Pair};
+use sp_core::{crypto::Ss58Codec, sr25519, Pair};
 
 const DEFAULT_FUNDED_JSON_PATH: &str = "funded-accounts.json";
 const FUNDS: u64 = 10_000_000_000_000_000;
@@ -30,7 +30,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 	let args = Args::parse();
 
-	let accounts: Vec<_> = funder_lib::derive_accounts(args.n, DERIVATION.to_owned())
+	let accounts: Vec<_> = funder_lib::derive_accounts::<sr25519::Pair>(args.n, DERIVATION.to_owned())
 		.into_iter()
 		.map(|p| (p.public().to_ss58check_with_version(args.ss58_prefix.into()), FUNDS))
 		.collect();

@@ -1,34 +1,160 @@
-// use futures::StreamExt;
-// use clap::ValueEnum;
-// use subxt::tx::PairSigner;
-// use futures::stream::FuturesUnordered;
-// use std::collections::HashMap;
-// use subxt::config::substrate::AccountId32;
 use futures::StreamExt;
 use tokio::sync::mpsc::{self, Sender, UnboundedSender};
 use std::collections::HashMap;
 use clap::ValueEnum;
-use subxt::tx::PairSigner;
+// use subxt::tx::PairSigner;
 use futures::stream::FuturesUnordered;
 use clap::Parser;
 use jsonrpsee_client_transport::ws::WsTransportClientBuilder;
 use jsonrpsee_core::client::Client;
-use parity_scale_codec::{Compact, Decode};
+use parity_scale_codec::{Compact, Decode, Encode, MaxEncodedLen};
 use serde_json::json;
 use std::{cmp::max, error::Error, sync::Arc, time::Duration};
 use subxt::{
-	backend::legacy::LegacyBackend, config::DefaultExtrinsicParamsBuilder, ext::sp_core::crypto::{Pair as _, Ss58Codec}, OnlineClient, PolkadotConfig
+	backend::legacy::LegacyBackend, config::DefaultExtrinsicParamsBuilder, OnlineClient
 };
+use sp_core::crypto::{Pair as _, Ss58Codec};
+use sp_runtime::traits::IdentifyAccount;
 use zombienet_sdk::{NetworkConfigBuilder, NetworkConfigExt, NetworkNode, RegistrationStrategy};
-use subxt::{dynamic::Value as TxValue};
+use subxt::dynamic::Value as TxValue;
 
+use sha3::{Keccak256, Digest};
+use sp_core::{keccak_256, ecdsa};
+use subxt::utils::H160;
+use subxt::Config;
+use subxt::tx::Signer;
 mod metrics;
 use metrics::*;
+
+#[derive(
+	Eq, PartialEq, Copy, Clone, Encode, Decode, MaxEncodedLen, Default, PartialOrd, Ord, Hash
+)]
+pub struct AccountId20(pub [u8; 20]);
+
+impl_serde::impl_fixed_hash_serde!(AccountId20, 20);
+
+impl std::fmt::Display for AccountId20 {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		let address = hex::encode(self.0).trim_start_matches("0x").to_lowercase();
+		let address_hash = hex::encode(keccak_256(address.as_bytes()));
+
+		let checksum: String =
+			address
+				.char_indices()
+				.fold(String::from("0x"), |mut acc, (index, address_char)| {
+					let n = u16::from_str_radix(&address_hash[index..index + 1], 16)
+						.expect("Keccak256 hashed; qed");
+
+					if n > 7 {
+						// make char uppercase if ith character is 9..f
+						acc.push_str(&address_char.to_uppercase().to_string())
+					} else {
+						// already lowercased
+						acc.push(address_char)
+					}
+
+					acc
+				});
+		write!(f, "{checksum}")
+	}
+}
+
+impl core::fmt::Debug for AccountId20 {
+	fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+		write!(f, "{:?}", H160(self.0))
+	}
+}
+
+impl From<[u8; 20]> for AccountId20 {
+	fn from(bytes: [u8; 20]) -> Self {
+		Self(bytes)
+	}
+}
+
+impl From<AccountId20> for [u8; 20] {
+	fn from(value: AccountId20) -> Self {
+		value.0
+	}
+}
+
+impl From<H160> for AccountId20 {
+	fn from(h160: H160) -> Self {
+		Self(h160.0)
+	}
+}
+
+impl From<AccountId20> for H160 {
+	fn from(value: AccountId20) -> Self {
+		H160(value.0)
+	}
+}
+
+impl std::str::FromStr for AccountId20 {
+	type Err = &'static str;
+	fn from_str(input: &str) -> Result<Self, Self::Err> {
+		H160::from_str(input).map(Into::into).map_err(|_| "invalid hex address.")
+	}
+}
+
+type EthSignature = [u8; 65];
+
+pub enum MythicalConfig {}
+
+impl Config for MythicalConfig {
+    type Hash = subxt::utils::H256;
+    type AccountId = AccountId20;
+    type Address = AccountId20;
+    type Signature = EthSignature;
+    type Hasher = subxt::config::substrate::BlakeTwo256;
+    type Header = subxt::config::substrate::SubstrateHeader<u32, subxt::config::substrate::BlakeTwo256>;
+    type ExtrinsicParams = subxt::config::SubstrateExtrinsicParams<Self>;
+    type AssetId = u32;
+}
+
+pub struct EthereumSigner {
+	account_id: AccountId20,
+	signer: ecdsa::Pair,
+}
+
+impl sp_runtime::traits::IdentifyAccount for EthereumSigner {
+	type AccountId = AccountId20;
+	fn into_account(self) -> Self::AccountId {
+		self.account_id
+	}
+}
+
+impl From<ecdsa::Pair> for EthereumSigner
+// where C::AccountId: AccountId20
+{
+	fn from(pair: ecdsa::Pair) -> Self {
+		let decompressed = libsecp256k1::PublicKey::parse_compressed(&pair.public().0)
+			.expect("Wrong compressed public key provided")
+			.serialize();
+		let mut m = [0u8; 64];
+		m.copy_from_slice(&decompressed[1..65]);
+		Self { account_id: H160::from_slice(&Keccak256::digest(m).as_slice()[12..32]).into(),
+			signer: pair
+		}
+	}
+}
+
+impl Signer<MythicalConfig> for EthereumSigner {
+    fn account_id(&self) -> <MythicalConfig as Config>::AccountId {
+        self.account_id
+    }
+
+    fn sign(&self, signer_payload: &[u8]) -> <MythicalConfig as Config>::Signature {
+        let hash = keccak_256(signer_payload);
+        let wrapped = libsecp256k1::Message::parse_slice(&hash).unwrap();
+        self.signer.sign_prehashed(&wrapped.0.b32()).try_into().expect("Signature has correct length")
+    }
+}
+
 
 /// Default derivation path for pre-funded accounts
 const SENDER_SEED: &str = "//Sender";
 const RECEIVER_SEED: &str = "//Receiver";
-const FUNDS: u64 = 10_000_000_000_000_000;
+const FUNDS: u64 = 10_000_000_000_000_000_000;
 
 struct HostnameGen {
 	prefix: String,
@@ -99,6 +225,10 @@ struct Args {
 	#[arg(long)]
 	relay_chainspec: Option<String>,
 
+	/// Chainspec command template.
+	#[arg(long)]
+	relay_chainspec_command: Option<String>,
+
 	/// Number of validators.
 	#[arg(long, default_value_t = 2_usize)]
 	relay_nodes: usize,
@@ -127,6 +257,14 @@ struct Args {
 	/// to the default chain spec of the collator.
 	#[arg(long)]
 	para_chain: Option<String>,
+
+	/// Path to a custom parachain spec.
+	#[arg(long)]
+	para_chainspec: Option<String>,
+
+	/// Chainspec command template.
+	#[arg(long)]
+	para_chainspec_command: Option<String>,
 
 	/// Block height to wait for before starting the benchmark
 	#[arg(long, short, default_value_t = 5_usize)]
@@ -183,8 +321,8 @@ fn looks_like_filename<'a>(v: impl Into<&'a str>) -> bool {
 
 #[derive(Decode)]
 struct Collection {
-	clid: u32,
-	owner: [u8; 32],
+	clid: [u64; 4],
+	owner: AccountId20,
 }
 
 #[derive(Decode)]
@@ -194,7 +332,7 @@ enum FinalizedEvent {
 }
 
 async fn block_subscriber(
-	api: OnlineClient<PolkadotConfig>,
+	api: OnlineClient<MythicalConfig>,
 	ntrans: usize,
 	coll_sender: Option<UnboundedSender<FinalizedEvent>>,
 	metrics: Option<StpsMetrics>,
@@ -213,8 +351,9 @@ async fn block_subscriber(
 		let mut last_block_ntrans = 0;
 		let mut last_blocktime: u64 = 0;
 
+		log::trace!(target: "events","BLOCK {}", block.number());
+
 		for ex in block.extrinsics().await?.iter() {
-			let ex = ex?;
 			match (ex.pallet_name()?, ex.variant_name()?) {
 				("Timestamp", "set") => {
 					let timestamp: Compact<u64> = Decode::decode(&mut &ex.field_bytes()[..])?;
@@ -236,7 +375,7 @@ async fn block_subscriber(
 		let mut proc_mint = 0;
 		for ev in block.events().await?.iter() {
 			let ev = ev?;
-			// log::info!("EVENT {}::{}", ev.pallet_name(), ev.variant_name());
+			log::trace!(target: "events","EVENT {}::{}", ev.pallet_name(), ev.variant_name());
 			match (ev.pallet_name(), ev.variant_name()) {
 				("Nfts", "Created") => {
 					proc_coll += 1;
@@ -315,13 +454,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 		ntrans
 	};
 
-	let mut send_accs = funder_lib::derive_accounts(naccs, SENDER_SEED.to_owned());
-	let mut recv_accs = funder_lib::derive_accounts(naccs, RECEIVER_SEED.to_owned());
+	let mut send_accs: Vec<_> = funder_lib::derive_accounts::<ecdsa::Pair>(ntrans, SENDER_SEED.to_owned());
+	let mut recv_accs: Vec<_> = funder_lib::derive_accounts::<ecdsa::Pair>(ntrans, RECEIVER_SEED.to_owned());
 
 	let accs = send_accs
 		.iter()
 		.chain(recv_accs.iter())
-		.map(|p| (p.public().to_ss58check_with_version(args.ss58_prefix.into()), FUNDS))
+		.map(|p| (format!("{}", EthereumSigner::from(p.clone()).into_account()), FUNDS))
 		.collect::<Vec<_>>();
 
 	let genesis_accs = json!({ "balances": { "balances": &serde_json::to_value(accs)? } });
@@ -335,6 +474,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 		let r = r.with_chain(args.relay_chain.as_str());
 		let r = if let Some(chainspec) = args.relay_chainspec {
 			r.with_chain_spec_path(chainspec.as_str())
+		} else if let Some(chainspec_command) = args.relay_chainspec_command {
+			r.with_chain_spec_command(chainspec_command)
 		} else {
 			r
 		};
@@ -359,10 +500,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 		//let r = if !args.para { r.with_genesis_overrides(genesis_accs.clone()) } else { r };
 		let r = r.with_genesis_overrides(json!({ "configuration": { "config": { "executor_params": [ { "MaxMemoryPages": 8192 }, { "PvfExecTimeout": [ "Backing", 2500 ] } ] } } } ));
 
-		let mut r = r.with_node(|node| node.with_name(relay_hostname.next().as_str()));
+		let mut r = r.with_node(|node| node.with_name(relay_hostname.next().as_str()).invulnerable(true));
 
 		for _ in 1..args.relay_nodes {
-			r = r.with_node(|node| node.with_name(relay_hostname.next().as_str()));
+			r = r.with_node(|node| node.with_name(relay_hostname.next().as_str()).invulnerable(true));
 		}
 
 		r
@@ -373,16 +514,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	} else {
 		let mut para_hostname = HostnameGen::new("collator");
 		relay.with_parachain(|p| {
-			let p = p.with_id(args.para_id).with_default_command(args.para_bin.as_str())
-				.with_chain_spec_command("{{mainCommand}} build-spec --extra-heap-pages 65000 --chain {{chainName}} {{disableBootnodes}}");
+			let p = p.with_id(args.para_id).with_default_command(args.para_bin.as_str()).evm_based(true);
+				// .with_chain_spec_command("{{mainCommand}} build-spec --extra-heap-pages 65000 --chain {{chainName}} {{disableBootnodes}}");
 
 			let p = if let Some(chain) = args.para_chain {
-				let chain = chain.as_str();
-				if looks_like_filename(chain) {
-					p.with_chain_spec_path(chain)
-				} else {
-					p.with_chain(chain)
-				}
+				p.with_chain(chain.as_str())
+			} else {
+				p
+			};
+
+			let p = if let Some(chainspec) = args.para_chainspec {
+				p.with_chain_spec_path(chainspec.as_str())
+			} else if let Some(chainspec_command) = args.para_chainspec_command {
+				p.with_chain_spec_command(chainspec_command)
 			} else {
 				p
 			};
@@ -466,23 +610,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	log::info!("Signing {} transactions...", send_accs.len());
 	let txs = match args.mode {
 		BenchMode::Stps => {
-			sender_lib::sign_balance_transfers(api.clone(), send_accs.into_iter().map(|a| (a, 0)).zip(recv_accs.into_iter()))?
-			// let api = api.clone();
-			// sender_lib::sign_txs(send_accs.into_iter().zip(recv_accs.into_iter()), move |(sender, receiver)| {
-			// 	let signer = EthereumSigner::from(sender);
-			// 	let tx_params = DefaultExtrinsicParamsBuilder::<MythicalConfig>::new().nonce(0).build();
-			// 	let tx_call = subxt::dynamic::tx(
-			// 		"Balances",
-			// 		"transfer_keep_alive",
-			// 		vec![
-			// 			TxValue::from_bytes(&EthereumSigner::from(receiver).into_account().0),
-			// 			TxValue::u128(1_000_000_000_000_000_000u128),
-			// 		],
-			// 	);
+		// 	sender_lib::sign_balance_transfers(api.clone(), send_accs.into_iter().map(|a| (a, 0)).zip(recv_accs.into_iter()))?
+		// 	// let api = api.clone();
+		// 	// sender_lib::sign_txs(send_accs.into_iter().zip(recv_accs.into_iter()), move |(sender, receiver)| {
+		// 	// 	let signer = EthereumSigner::from(sender);
+		// 	// 	let tx_params = DefaultExtrinsicParamsBuilder::<MythicalConfig>::new().nonce(0).build();
+		// 	// 	let tx_call = subxt::dynamic::tx(
+		// 	// 		"Balances",
+		// 	// 		"transfer_keep_alive",
+		// 	// 		vec![
+		// 	// 			TxValue::from_bytes(&EthereumSigner::from(receiver).into_account().0),
+		// 	// 			TxValue::u128(1_000_000_000_000_000_000u128),
+		// 	// 		],
+		// 	// 	);
 
-			// 	api.tx().create_signed_offline(&tx_call, &signer, tx_params.into())
-			// })?
+		// 	// 	api.tx().create_signed_offline(&tx_call, &signer, tx_params.into())
+		// 	// })?
+			Vec::new()
 		},
+
 		BenchMode::NftTransfer => {
 			let api2 = api.clone();
 			let create_coll_txs = sender_lib::sign_txs(send_accs.clone().into_iter(), move |sender| {
@@ -491,46 +637,31 @@ async fn main() -> Result<(), Box<dyn Error>> {
 					"Nfts",
 					"create",
 					vec![
-						TxValue::unnamed_variant("Id", [ TxValue::from_bytes(sender.public()) ]),
+						TxValue::from_bytes(&EthereumSigner::from(sender.clone()).into_account().0),
 						TxValue::named_composite(
 							vec![
 								("settings", TxValue::primitive(0u64.into())),
-								("max_supply", TxValue::unnamed_variant("None", vec![])),
+								("max_supply", TxValue::unnamed_variant("Some", vec![TxValue::u128(100u128)])),
 								("mint_settings", TxValue::named_composite(vec![
 									("mint_type", TxValue::unnamed_variant("Issuer", vec![])),
 									("price", TxValue::unnamed_variant("None", vec![])),
 									("start_block", TxValue::unnamed_variant("None", vec![])),
 									("end_block", TxValue::unnamed_variant("None", vec![])),
 									("default_item_settings", TxValue::primitive(0u64.into())),
+									("serial_mint", TxValue::bool(true)),
 								])),
 							]
 						)
 					]
 				);
-				api2.tx().create_signed_offline(&tx_call, &PairSigner::new(sender), tx_params)
-			})?;
+				api2.tx().create_partial_offline(&tx_call, tx_params).expect("Transaction created").sign(&EthereumSigner::from(sender))
+			});
+
 			let futs = create_coll_txs.iter().map(|tx| tx.submit()).collect::<FuturesUnordered<_>>();
-			// let futs = create_coll_txs.iter().map(|tx| tx.submit_and_watch()).collect::<FuturesUnordered<_>>();
-			// let res = futs.collect::<Vec<_>>().await.into_iter().collect::<Result<Vec<_>, _>>().expect("All the transactions submitted successfully");
 			let _res = futs.collect::<Vec<_>>().await.into_iter().collect::<Result<Vec<_>, _>>().expect("All the transactions submitted successfully");
-			// let waiter = res.into_iter().map(|txp| txp.wait_for_finalized_success()).collect::<FuturesUnordered<_>>();
-			// let res = waiter.collect::<Vec<_>>().await.into_iter().collect::<Result<Vec<_>, _>>().expect("All the collection creation transaction finalized");
-
-			// let mut collections = Vec::new();
-
-			// for ev in res {
-			// 	for ed in ev.iter() {
-			// 		let ed = ed?;
-			// 		if ed.pallet_name() == "Nfts" && ed.variant_name() == "Created" {
-			// 			let b = ed.field_bytes();
-			// 			let e = Collection::decode(&mut &b[..])?;
-			// 			collections.push(e);
-			// 		}
-			// 	}
-			// }
 
 			let mut proc_coll = 0;
-			let mut map: HashMap<[u8; 32], u32> = HashMap::new();
+			let mut map: HashMap<AccountId20, [u64; 4]> = HashMap::new();
 			while proc_coll < ntrans {
 				let e = coll_recv.recv().await.expect("Recv receives");
 				let FinalizedEvent::NftCollectionCreated(c) = e else {
@@ -543,7 +674,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 			let mut cll = Vec::new();
 
 			for s in send_accs.clone().into_iter() {
-				let addr: [u8; 32] = s.public().into();
+				let addr = EthereumSigner::from(s.clone()).into_account();
 				let cl = map.get(&addr).expect("Collection exists").clone();
 				cll.push((s, cl));
 			}
@@ -556,22 +687,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
 					"Nfts",
 					"mint",
 					vec![
-						TxValue::primitive(coll.1.into()),
-						TxValue::primitive(0u32.into()),
-						// TxValue::unnamed_composite(coll.1.into_iter().map(|a| a.into())),
-						// TxValue::unnamed_composite(vec![0u64.into(), 0u64.into(), 0u64.into(), 0u64.into()]),
-						TxValue::unnamed_variant("Id", [ TxValue::from_bytes(coll.0.public()) ]),
+						TxValue::unnamed_composite(coll.1.into_iter().map(|a| a.into())),
+						TxValue::unnamed_variant("None", vec![]),
+						TxValue::from_bytes(&EthereumSigner::from(coll.0.clone()).into_account().0),
 						TxValue::unnamed_variant("None", vec![]),
 					]
 				);
-				api2.tx().create_signed_offline(&tx_call, &PairSigner::new(coll.0), tx_params)
-			})?;
+				api2.tx().create_partial_offline(&tx_call, tx_params).expect("Transaction created").sign(&EthereumSigner::from(coll.0))
+			});
 
-			// let futs = mint_txs.iter().map(|tx| tx.submit_and_watch()).collect::<FuturesUnordered<_>>();
 			let futs = mint_txs.iter().map(|tx| tx.submit()).collect::<FuturesUnordered<_>>();
 			let _res = futs.collect::<Vec<_>>().await.into_iter().collect::<Result<Vec<_>, _>>().expect("All the mint transactions submitted successfully");
-			// let waiter = res.into_iter().map(|txp| txp.wait_for_finalized_success()).collect::<FuturesUnordered<_>>();
-			// let _res = waiter.collect::<Vec<_>>().await.into_iter().collect::<Result<Vec<_>, _>>().expect("All the mint transaction finalized");
 
 			let mut proc_mint = 0;
 			while proc_mint < ntrans {
@@ -585,23 +711,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
 			let api2 = api.clone();
 
 			sender_lib::sign_txs(cll.into_iter().zip(recv_accs.into_iter()), move |(coll, receiver)| {
-				let signer = PairSigner::new(coll.0);
-				let tx_params = DefaultExtrinsicParamsBuilder::new().nonce(2).build();
+				let signer = EthereumSigner::from(coll.0);
+				let tx_params = DefaultExtrinsicParamsBuilder::<MythicalConfig>::new().nonce(2).build();
 				let tx_call = subxt::dynamic::tx(
 					"Nfts",
 					"transfer",
 					vec![
-						TxValue::primitive(coll.1.into()),
-						TxValue::primitive(0u32.into()),
-						// TxValue::unnamed_composite(coll.1.into_iter().map(|a| a.into())),
-						// TxValue::unnamed_composite(vec![0u64.into(), 0u64.into(), 0u64.into(), 0u64.into()]),
-						TxValue::unnamed_variant("Id", [ TxValue::from_bytes(receiver.public()) ]),
-						// TxValue::from_bytes(&EthereumSigner::from(receiver).into_account().0),
+						TxValue::unnamed_composite(coll.1.into_iter().map(|a| a.into())),
+						TxValue::u128(1u128),
+						TxValue::from_bytes(&EthereumSigner::from(receiver).into_account().0),
 					],
 				);
 
-				api2.tx().create_signed_offline(&tx_call, &signer, tx_params.into())
-			})?
+				api2.tx().create_partial_offline(&tx_call, tx_params).expect("Transaction created").sign(&signer)
+			})
 		}
 	};
 
