@@ -11,12 +11,7 @@ use std::{
 // use subxt::{ext::sp_core::Pair, utils::AccountId32, OnlineClient, PolkadotConfig};
 
 use subxt::{
-	blocks::BlockRef,
-	config::polkadot::PolkadotExtrinsicParamsBuilder as Params,
-	dynamic::Value,
-	ext::sp_core::{sr25519::Pair as SrPair, Pair},
-	tx::PairSigner,
-	OnlineClient, PolkadotConfig,
+	blocks::BlockRef, config::polkadot::PolkadotExtrinsicParamsBuilder as Params, dynamic::Value, ext::sp_core::{sr25519::Pair as SrPair, Pair}, tx::PairSigner, OnlineClient, PolkadotConfig
 };
 use tokio::sync::RwLock;
 
@@ -285,10 +280,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 						let mut txcount = 0;
 
 						for ex in extrinsics.iter() {
-							let Ok(ex) = ex else {
-								continue
-							};
-
 							match (ex.pallet_name().expect("pallet name"), ex.variant_name().expect("variant name")) {
 								("Timestamp", "set") => {
 									let new_timestamp = Duration::from_millis(codec::Compact::<u64>::decode(&mut &ex.field_bytes()[..]).expect("timestamp decodes").0);

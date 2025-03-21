@@ -9,16 +9,20 @@ edition = "2021"
 funder = { path = "../funder" }
 log = "0.4.16"
 env_logger = "0.10.0"
-subxt.workspace = true
+subxt = { workspace = true, features = ["jsonrpsee"] }
 clap = { version = "4.3.0", features = ["derive"] }
 tokio = { version = "1.28.2", features = ["rt-multi-thread", "macros", "time"] }
-codec = { package = "parity-scale-codec", version = "3.5.0", default-features = false, features = ["derive", "full", "bit-vec"] }
+codec = { package = "parity-scale-codec", version = "3.5.0", default-features = false, features = [
+	"derive",
+	"full",
+	"bit-vec",
+] }
 futures = "0.3.28"
 frame-system.workspace = true
 pallet-balances.workspace = true
 url = "2.5"
-jsonrpsee-client-transport = "0.22"
-jsonrpsee-core = "0.22"
+jsonrpsee-client-transport = { version = "0.24", features = ["ws"] }
+jsonrpsee-core = { version = "0.24", features = ["async-client", "client"] }
 
 [lib]
 name = "sender_lib"
