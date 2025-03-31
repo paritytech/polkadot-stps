@@ -100,8 +100,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 	log::info!("worker_sleep = {}", worker_sleep);
 
-	let sender_accounts = funder_lib::derive_accounts(n_tx_sender, SENDER_SEED.to_owned());
-	let receiver_accounts = funder_lib::derive_accounts(n_tx_sender, RECEIVER_SEED.to_owned());
+	let sender_accounts: Vec<_> = funder_lib::derive_accounts(n_tx_sender, SENDER_SEED.to_owned());
+	let receiver_accounts: Vec<_> = funder_lib::derive_accounts(n_tx_sender, RECEIVER_SEED.to_owned());
 
 	async fn create_api(node_url: String) -> OnlineClient<PolkadotConfig> {
 		let node_url = url::Url::parse(&node_url).unwrap();

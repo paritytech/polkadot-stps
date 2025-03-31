@@ -315,13 +315,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 		ntrans
 	};
 
-	let mut send_accs = funder_lib::derive_accounts(naccs, SENDER_SEED.to_owned());
-	let mut recv_accs = funder_lib::derive_accounts(naccs, RECEIVER_SEED.to_owned());
+	let mut send_accs: Vec<_> = funder_lib::derive_accounts(naccs, SENDER_SEED.to_owned());
+	let mut recv_accs: Vec<_> = funder_lib::derive_accounts(naccs, RECEIVER_SEED.to_owned());
 
 	let accs = send_accs
 		.iter()
 		.chain(recv_accs.iter())
-		.map(|p| (p.public().to_ss58check_with_version(args.ss58_prefix.into()), FUNDS))
+		.map(|p: SrPair| (p.public().to_ss58check_with_version(args.ss58_prefix.into()), FUNDS))
 		.collect::<Vec<_>>();
 
 	let genesis_accs = json!({ "balances": { "balances": &serde_json::to_value(accs)? } });
@@ -467,21 +467,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	let txs = match args.mode {
 		BenchMode::Stps => {
 			sender_lib::sign_balance_transfers(api.clone(), send_accs.into_iter().map(|a| (a, 0)).zip(recv_accs.into_iter()))?
-			// let api = api.clone();
-			// sender_lib::sign_txs(send_accs.into_iter().zip(recv_accs.into_iter()), move |(sender, receiver)| {
-			// 	let signer = EthereumSigner::from(sender);
-			// 	let tx_params = DefaultExtrinsicParamsBuilder::<MythicalConfig>::new().nonce(0).build();
-			// 	let tx_call = subxt::dynamic::tx(
-			// 		"Balances",
-			// 		"transfer_keep_alive",
-			// 		vec![
-			// 			TxValue::from_bytes(&EthereumSigner::from(receiver).into_account().0),
-			// 			TxValue::u128(1_000_000_000_000_000_000u128),
-			// 		],
-			// 	);
-
-			// 	api.tx().create_signed_offline(&tx_call, &signer, tx_params.into())
-			// })?
 		},
 		BenchMode::NftTransfer => {
 			let api2 = api.clone();
