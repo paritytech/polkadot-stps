@@ -1,19 +1,28 @@
 use clap::Parser;
 use codec::Decode;
-use futures::future::try_join_all;
+use futures::TryStreamExt;
 use log::*;
-use sp_core::{sr25519::Pair as SrPair, Pair};
-use subxt::{
-	config::extrinsic_params::{BaseExtrinsicParamsBuilder as Params, Era},
-	tx::{PairSigner, SubmittableExtrinsic},
-	PolkadotConfig,
-	OnlineClient,
+use std::{
+	collections::VecDeque,
+	error::Error,
+	sync::atomic::{AtomicU64, Ordering},
+	time::Instant,
 };
-use utils::{connect, runtime, Api, Error, DERIVATION};
+// use subxt::{ext::sp_core::Pair, utils::AccountId32, OnlineClient, PolkadotConfig};
 
-mod pre;
+use subxt::{
+	blocks::BlockRef,
+	config::polkadot::PolkadotExtrinsicParamsBuilder as Params,
+	dynamic::Value,
+	OnlineClient, PolkadotConfig,
+};
+use sp_core::{sr25519::Pair as SrPair, Pair};
+use tokio::sync::RwLock;
 
-use pre::{parallel_pre_conditions, pre_conditions};
+use sender_lib::{PairSigner, sign_balance_transfers};
+
+const SENDER_SEED: &str = "//Sender";
+const RECEIVER_SEED: &str = "//Receiver";
 
 /// Util program to send transactions
 #[derive(Parser, Debug)]
@@ -22,14 +31,6 @@ struct Args {
 	/// Node URL. Can be either a collator, or relaychain node based on whether you want to measure parachain TPS, or relaychain TPS.
 	#[arg(long)]
 	node_url: String,
-
-	/// Set to the number of desired threads (default: 1). If set > 1 the program will spawn multiple threads to send transactions in parallel.
-	#[arg(long, default_value_t = 1)]
-	threads: usize,
-
-	/// The sender index. Useful if you set threads to =< 1 and run multiple sender instances (as in the zombienet tests).
-	#[arg(long)]
-	sender_index: Option<usize>,
 
 	/// Total number of senders
 	#[arg(long)]
@@ -41,242 +42,303 @@ struct Args {
 
 	/// Total number of pre-funded accounts (on funded-accounts.json).
 	#[arg(long)]
-	num: usize,
+	tps: usize,
+
+	/// Send in batch mode with the batch size this large.
+	#[arg(long, default_value_t = 0)]
+	batch: usize,
 }
 
-async fn send_funds(
-	api: &Api,
-	sender_index: usize,
-	chunk_size: usize,
-	n_tx_sender: usize,
-) -> Result<(), Error> {
-	let receivers = generate_receivers(n_tx_sender, sender_index); // one receiver per tx
-	let ext_deposit_addr = runtime::constants().balances().existential_deposit();
-	let ext_deposit = api.constants().at(&ext_deposit_addr)?;
+// FIXME: This assumes that all the chains supported by sTPS use this `AccountInfo` type. Currently,
+// that holds. However, to benchmark a chain with another `AccountInfo` structure, a mechanism to
+// adjust this type info should be provided.
+type AccountInfo = frame_system::AccountInfo<u32, pallet_balances::AccountData<u128>>;
 
-	info!("Sender {}: signing {} transactions", sender_index, n_tx_sender);
-	let mut txs = Vec::new();
-	for i in 0..n_tx_sender {
-		let shift = sender_index * n_tx_sender;
-		let signer = generate_signer(shift + i);
-		let tx_params = Params::new().era(Era::Immortal, api.genesis_hash());
-		let unsigned_tx = runtime::tx()
-			.balances()
-			.transfer_keep_alive(receivers[i as usize].clone().into(), ext_deposit);
-		let signed_tx = api.tx().create_signed_with_nonce(&unsigned_tx, &signer, 0, tx_params)?;
-		txs.push(signed_tx);
-	}
+use jsonrpsee_client_transport::ws::WsTransportClientBuilder;
+use jsonrpsee_core::client::{async_client::PingConfig, Client};
+use std::sync::Arc;
+use subxt::backend::legacy::LegacyBackend;
 
-	info!(
-		"Sender {}: sending {} transactions in chunks of {}",
-		sender_index, n_tx_sender, chunk_size
-	);
-	let mut last_now = std::time::Instant::now();
-	let mut last_sent = 0;
-	let start = std::time::Instant::now();
+use tokio::time::Duration;
 
-	for (i, chunk) in txs.chunks(chunk_size).enumerate() {
-		let mut hashes = Vec::new();
-		for tx in chunk {
-			let hash = tx.submit();
-			hashes.push(hash);
-		}
-		try_join_all(hashes).await?;
-
-		let elapsed = last_now.elapsed();
-		if elapsed >= std::time::Duration::from_secs(1) {
-			let sent = i * chunk_size - last_sent;
-			let rate = sent as f64 / elapsed.as_secs_f64();
-			info!(
-				"Sender {}: {} txs sent in {} ms ({:.2} /s)",
-				sender_index,
-				sent,
-				elapsed.as_millis(),
-				rate
-			);
-			last_now = std::time::Instant::now();
-			last_sent = i * chunk_size;
-		}
-	}
-	let rate = n_tx_sender as f64 / start.elapsed().as_secs_f64();
-	info!(
-		"Sender {}: {} txs sent in {} ms ({:.2} /s)",
-		sender_index,
-		n_tx_sender,
-		start.elapsed().as_millis(),
-		rate
+async fn get_account_nonce<C: subxt::Config>(
+	api: &OnlineClient<C>,
+	block: BlockRef<C::Hash>,
+	account: &SrPair,
+) -> u64 {
+	let pubkey = account.public();
+	let account_state_storage_addr = subxt::dynamic::storage(
+		"System",
+		"Account",
+		vec![subxt::dynamic::Value::from_bytes(pubkey)],
 	);
 
-	Ok(())
+	let account_state_enc = api
+		.storage()
+		.at(block)
+		.fetch(&account_state_storage_addr)
+		.await
+		.expect("Account status fetched")
+		.expect("Nonce is set")
+		.into_encoded();
+
+	let account_state: AccountInfo =
+		Decode::decode(&mut &account_state_enc[..]).expect("Account state decodes successfuly");
+	account_state.nonce.into()
 }
 
-/// Generates a signer from a given index.
-pub fn generate_signer(i: usize) -> PairSigner<PolkadotConfig, SrPair> {
-	let pair: SrPair = Pair::from_string(format!("{}{}", DERIVATION, i).as_str(), None).unwrap();
-	let signer: PairSigner<PolkadotConfig, SrPair> = PairSigner::new(pair);
-	signer
-}
-
-/// Generates a vector of account IDs from a given index.
-fn generate_receivers(n: usize, sender_index: usize) -> Vec<sp_core::crypto::AccountId32> {
-	let shift = sender_index * n;
-	let mut receivers = Vec::new();
-	for i in 0..n {
-		// Decode the account ID from the string:
-		let account_id = Decode::decode(&mut &format!("{:0>32?}", shift + i).as_bytes()[..])
-			.expect("Must decode account ID");
-		receivers.push(account_id);
-	}
-	debug!("Generated {} receiver addresses", receivers.len());
-	receivers
-}
-
-/// Parallel version of the send funds function, except that it does not send the transactions.
-/// Note that signing is a CPU bound task, and hence this cannot be async.
-/// As a consequence, we use spawn_blocking here and communicate with the main thread using an unbounded channel.
-fn parallel_signing(
-	api: &Api,
-	threads: &usize,
-	n_tx_sender: usize,
-	producer: tokio::sync::mpsc::UnboundedSender<Vec<SubmittableExtrinsic<PolkadotConfig, OnlineClient<PolkadotConfig>>>>
-) -> Result<(), Error> {
-	let ext_deposit_addr = runtime::constants().balances().existential_deposit();
-	let genesis_hash = api.genesis_hash();
-	let ext_deposit = api.constants().at(&ext_deposit_addr)?;
-
-	for i in 0..*threads {
-		let api = api.clone();
-		let producer = producer.clone();
-		tokio::task::spawn_blocking(move || {
-			debug!("Thread {}: preparing {} transactions", i, n_tx_sender);
-			let ext_deposit = ext_deposit.clone();
-			let genesis_hash = genesis_hash.clone();
-			let receivers = generate_receivers(n_tx_sender, i);
-			let mut txs = Vec::new();
-			for j in 0..n_tx_sender {
-				debug!("Thread {}: preparing transaction {}", i, j);
-				let shift = i * n_tx_sender;
-				let signer = generate_signer(shift + j);
-				debug!("Thread {}: generated signer {}{}", i, DERIVATION, shift + j);
-				let tx_params = Params::new().era(Era::Immortal, genesis_hash);
-				let tx_payload = runtime::tx()
-					.balances()
-					.transfer_keep_alive(receivers[j as usize].clone().into(), ext_deposit);
-				let signed_tx =
-					match api.tx().create_signed_with_nonce(&tx_payload, &signer, 0, tx_params) {
-						Ok(signed) => signed,
-						Err(e) => panic!("Thread {}: failed to sign transaction due to: {}", i, e),
-					};
-				txs.push(signed_tx);
-			}
-			match producer.send(txs) {
-				Ok(_) => (),
-				Err(e) => error!("Thread {}: failed to send transactions to consumer: {}", i, e),
-			}
-			info!("Thread {}: prepared and signed {} transactions", i, n_tx_sender);
-		});
-	}
-	Ok(())
-}
-
-/// Here the signed extrinsics are submitted.
-async fn submit_txs(
-	consumer: &mut tokio::sync::mpsc::UnboundedReceiver<Vec<SubmittableExtrinsic<PolkadotConfig, OnlineClient<PolkadotConfig>>>>,
-	chunk_size: usize,
-	threads: usize,
-) -> Result<(), Error> {
-	let mut submittable_vecs = Vec::new();
-	while let Some(signed_txs) = consumer.recv().await {
-		debug!("Consumer: received {} submittable transactions", signed_txs.len());
-		submittable_vecs.push(signed_txs);
-		if threads == submittable_vecs.len() {
-			debug!("Consumer: received all submittable transactions, now starting submission");
-			for vec in &submittable_vecs {
-				for chunk in vec.chunks(chunk_size) {
-					let mut hashes = Vec::new();
-					for signed_tx in chunk {
-						let hash = signed_tx.submit();
-						hashes.push(hash);
-					}
-					try_join_all(hashes).await?;
-					debug!("Sender submitted chunk with size: {}", chunk_size);
-				}
-			}
-			info!("Sender submitted all transactions");
-		}
-	}
-	Ok(())
-}
-
-#[tokio::main]
-async fn main() -> Result<(), Error> {
+fn main() -> Result<(), Box<dyn Error>> {
 	env_logger::init_from_env(
 		env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info"),
 	);
 
 	let args = Args::parse();
-	let node_url = args.node_url;
-	let threads = args.threads;
-	let chunk_size = args.chunk_size;
 
-	// This index is optional and only set when single-threaded mode is used.
-	// If it is not set, we default to 0.
-	let sender_index = match args.sender_index {
-		Some(i) => i,
-		None => 0,
-	};
+	// Assume number of senders equal to TPS if not specified.
+	let n_sender_tasks = if args.batch > 0 { args.tps / args.batch } else { args.tps };
+	let n_tx_sender = args.total_senders.unwrap_or(args.tps);
+	let worker_sleep = 1_000u64; //f64 * (n_sender_tasks as f64 / args.tps as f64)) as u64;
 
-	// In case the optional total_senders argument is not passed for single-threaded mode,
-	// we must make sure that we split the work evenly between threads for multi-threaded mode.
-	let n_tx_sender = match args.total_senders {
-		Some(tot_s) => args.num / tot_s,
-		None => args.num / threads,
-	};
+	log::info!("worker_sleep = {}", worker_sleep);
 
-	// Create the client here, so that we can use it in the various functions.
-	let api = connect(&node_url).await?;
+	let sender_accounts: Vec<_> = funder_lib::derive_accounts(n_tx_sender, SENDER_SEED.to_owned());
+	let receiver_accounts: Vec<_> = funder_lib::derive_accounts(n_tx_sender, RECEIVER_SEED.to_owned());
 
-	match args.threads {
-		n if n > 1 => {
-			info!("Starting sender in parallel mode");
-			let (producer, mut consumer) = tokio::sync::mpsc::unbounded_channel();
-			// I/O Bound
-			parallel_pre_conditions(&api, &threads, &n_tx_sender).await?;
-			// CPU Bound
-			match parallel_signing(&api, &threads, n_tx_sender, producer) {
-				Ok(_) => (),
-				Err(e) => panic!("Error: {:?}", e),
-			}
-			// I/O Bound
-			submit_txs(&mut consumer, chunk_size, threads).await?;
-		},
-		// Single-threaded mode
-		n if n == 1 => {
-			debug!("Starting sender in single-threaded mode");
-			match args.sender_index {
-				Some(i) => {
-					pre_conditions(&api, &i, &n_tx_sender).await?;
-					send_funds(&api, sender_index, chunk_size, n_tx_sender).await?;
-				},
-				None => panic!("Must set sender index when running in single-threaded mode"),
-			}
-		},
-		// All other non-sensical cases
-		_ => panic!("Number of threads must be 1, or greater!"),
+	async fn create_api(node_url: String) -> OnlineClient<PolkadotConfig> {
+		let node_url = url::Url::parse(&node_url).unwrap();
+		let (node_sender, node_receiver) =
+			WsTransportClientBuilder::default().build(node_url.clone()).await.unwrap();
+		let client = Client::builder()
+			.request_timeout(Duration::from_secs(10))
+			.max_buffer_capacity_per_subscription(16 * 1024 * 1024)
+			.enable_ws_ping(PingConfig::new().ping_interval(Duration::from_secs(10)))
+			.set_tcp_no_delay(true)
+			.max_concurrent_requests(1024 * 10)
+			.build_with_tokio(node_sender, node_receiver);
+		let backend = Arc::new(LegacyBackend::builder().build(client));
+		OnlineClient::from_backend(backend).await.unwrap()
 	}
-	Ok(())
-}
 
-#[cfg(test)]
-mod tests {
-	use std::collections::BTreeSet as Set;
+	loop {
+		tokio::runtime::Builder::new_multi_thread()
+			.enable_all()
+			.build()
+			.unwrap()
+			.block_on(async {
+				let node_url = args.node_url.clone();
+				let api = create_api(node_url.clone()).await;
 
-	#[test]
-	/// Check that the generated addresses are unique.
-	fn generate_receivers_unique() {
-		let receivers = super::generate_receivers(1024, 0);
-		let set: Set<_> = receivers.iter().collect();
+				// Subscribe to best block stream
+				let mut best_block_stream  = api.blocks().subscribe_best().await.expect("Subscribe to best block failed");
+				let best_block = Arc::new(RwLock::new((best_block_stream.next().await.unwrap().unwrap(), Instant::now())));
 
-		assert_eq!(set.len(), receivers.len());
+				log::info!("Current best block: {}", best_block.read().await.0.number() );
+
+				let sender_signers = sender_accounts
+					.iter()
+					.cloned()
+					.map(PairSigner::new)
+					.collect::<Vec<_>>();
+
+				info!("Starting senders");
+
+				// Overall metrics that we use to throttle
+				// Transactions sent since last block
+				let sent = Arc::new(AtomicU64::default());
+				// Number of in block transactions.
+				let in_block = Arc::new(AtomicU64::default());
+
+				let mut handles = Vec::new();
+				let mut timestamp = Duration::from_micros(0);
+				let mut block_time = Duration::from_micros(0);
+
+				loop {
+					sent.store(0, Ordering::SeqCst);
+					in_block.store(0, Ordering::SeqCst);
+
+					// Spawn 1 task per sender.
+					for i in 0..n_sender_tasks {
+						let in_block = in_block.clone();
+						let sent = sent.clone();
+
+						let sender = sender_accounts[i].clone();
+						let signer = sender_signers[i].clone();
+
+						let best_block = best_block.clone();
+						let sent = sent.clone();
+						let in_block = in_block.clone();
+
+						let api = api.clone();
+						let nrecv = if args.batch > 0 { args.batch } else { 1 };
+						let receiver_accounts = receiver_accounts.clone();
+
+						// TODO: Fix future transaction problem ....
+						let task = async move {
+							// Slowly ramp up
+							tokio::time::sleep(std::time::Duration::from_millis((i/8) as u64)).await;
+
+							let receivers = &receiver_accounts[i..i+nrecv];
+							let mut sleep_time_ms = 0u64;
+							let block_ref: BlockRef<subxt::utils::H256> = BlockRef::from_hash(best_block.read().await.0.hash());
+							let mut nonce = get_account_nonce(&api, block_ref.clone(), &sender).await;
+
+							loop {
+								if sent.load(Ordering::SeqCst) > in_block.load(Ordering::SeqCst) + 12000 { // TODO: rpc pool size
+									// Wait 10ms and check again.
+									tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+									// Substract above sleep from TPS delay.
+									sleep_time_ms = sleep_time_ms.saturating_sub(10);
+									continue
+								}
+
+								// Target a rate of 1TPS per worker, so we wait.
+								tokio::time::sleep(std::time::Duration::from_millis(sleep_time_ms)).await;
+								let now = Instant::now();
+								log::debug!("Sender {} using nonce {}", i, nonce);
+
+								let tx_payload = if args.batch > 0 {
+									let calls = (0..args.batch).map(|i|
+										subxt::dynamic::tx(
+											"Balances",
+											"transfer_keep_alive",
+											vec![
+												Value::unnamed_variant("Id", [Value::from_bytes(receivers[i].public())]),
+												Value::u128(1u32.into()),
+											],
+										).into_value()
+									).collect::<Vec<_>>();
+
+									subxt::dynamic::tx(
+										"Utility",
+										"batch",
+										vec![ Value::named_composite(vec![("calls", calls.into())]) ]
+									)
+								} else {
+									subxt::dynamic::tx(
+										"Balances",
+										"transfer_keep_alive",
+										vec![
+											Value::unnamed_variant("Id", [Value::from_bytes(receivers[0].public())]),
+											Value::u128(1u32.into()),
+										],
+									)
+								};
+								log::debug!("Sender {} using nonce {}", i, nonce);
+								let tx_params = Params::new().nonce(nonce as u64).build();
+
+								let tx = api
+									.tx()
+									.create_partial_offline(&tx_payload, tx_params)
+									.expect("Failed to create partial offline transaction")
+									.sign(&signer);
+
+								match tx.submit_and_watch().await {
+									Ok(_watch) => {},
+									Err(err) => {
+										log::debug!("{:?}", err);
+										let block_ref: BlockRef<subxt::utils::H256> = BlockRef::from_hash(best_block.read().await.0.hash());
+										nonce = get_account_nonce(&api, block_ref, &sender).await;
+										// at most 1 second
+										sleep_time_ms = worker_sleep.saturating_sub(now.elapsed().as_millis() as u64);
+										continue
+									}
+								};
+
+								sent.fetch_add(1, Ordering::SeqCst);
+								// Determine how much left to sleep, we need to retry in 1000ms (backoff)
+								sleep_time_ms = worker_sleep.saturating_sub(now.elapsed().as_millis() as u64);
+								nonce += 1;
+							}
+						};
+						handles.push(tokio::spawn(task));
+					}
+
+					log::info!("All senders started");
+
+					let mut tps_window = VecDeque::new();
+					let loop_start = Instant::now();
+
+					loop {
+						if let Ok(Some(new_best_block)) = best_block_stream.try_next().await {
+							*best_block.write().await = (new_best_block, Instant::now());
+						} else {
+							log::error!("Best block subscription lost, trying to reconnect ... ");
+							loop {
+								match api.blocks().subscribe_best().await {
+									Ok(fresh_best_block_stream) => {
+										best_block_stream = fresh_best_block_stream;
+										log::info!("Reconnected.");
+										break;
+									}
+									Err(e) => {
+										log::error!("Reconnect failed: {:?} ", e);
+										tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+									}
+								}
+							}
+						}
+
+						let best_block = &best_block.read().await.0;
+						let Ok(extrinsics) = best_block.extrinsics().await else {
+							// Most likely, need to reconnect to RPC.
+							continue
+						};
+
+						let mut txcount = 0;
+
+						for ex in extrinsics.iter() {
+							match (ex.pallet_name().expect("pallet name"), ex.variant_name().expect("variant name")) {
+								("Timestamp", "set") => {
+									let new_timestamp = Duration::from_millis(codec::Compact::<u64>::decode(&mut &ex.field_bytes()[..]).expect("timestamp decodes").0);
+									block_time =  new_timestamp - timestamp;
+									timestamp = new_timestamp;
+								},
+								("Nfts", "transfer") => {
+									txcount += 1;
+								},
+								_ => (),
+							}
+						}
+
+						for ev in best_block.events().await.expect("Events are available").iter() {
+							let ev = ev.expect("Event is available");
+							match (ev.pallet_name(), ev.variant_name()) {
+								("Balances", "Transfer") => {
+									txcount += 1;
+								},
+								_ => (),
+							}
+						}
+
+						in_block.fetch_add(txcount , Ordering::SeqCst);
+						let btime = if block_time.is_zero() { 6000 } else { block_time.as_millis() };
+						let tps = txcount * 1000 / btime as u64;
+						tps_window.push_back(tps as usize);
+
+						// A window of size 3
+						if tps_window.len() > 3 {
+							tps_window.pop_front();
+							let avg_tps = tps_window.iter().sum::<usize>();
+							if avg_tps < args.tps / 3 {
+								log::warn!("TPS dropped by at least 66% ...");
+								break;
+							}
+						}
+
+						let avg_tps = tps_window.iter().sum::<usize>() / tps_window.len();
+
+						log::info!("TPS: {} \t | Avg: {} \t | Sent/Exec: {}/{} | Best: {} | txs = {} | block time = {:?}", tps, avg_tps, sent.load(Ordering::SeqCst),  in_block.load(Ordering::SeqCst), best_block.number(), txcount, block_time);
+						if loop_start.elapsed() > Duration::from_secs(60 * 5) {
+							break;
+						}
+					}
+
+					// Restarting
+					for handle in handles.iter() {
+						handle.abort();
+					}
+					log::info!("Restarting senders");
+				}
+			});
 	}
 }

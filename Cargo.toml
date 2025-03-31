@@ -1,0 +1,22 @@
+[workspace.package]
+authors = ["Parity Technologies <admin@parity.io>"]
+edition = "2021"
+repository = "https://github.com/paritytech/polkadot-sdk.git"
+license = "GPL-3.0-only"
+
+[workspace]
+resolver = "2"
+members = ["utils/funder", "utils/sender", "stps"]
+
+default-members = ["stps"]
+
+[workspace.dependencies]
+sp-core = "31.0.0"
+sp-runtime = "34.0.0"
+sp-keyring = "34.0.0"
+subxt = "0.41"
+frame-system = "31.0.0"
+pallet-balances = "31.0.0"
+reqwest = "0.11"
+jsonrpsee-client-transport = { version = "0.24.8", features = [ "ws" ] }
+jsonrpsee-core = { version = "0.24.8", features = [ "async-client" ] }

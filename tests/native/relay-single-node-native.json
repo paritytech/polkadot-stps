@@ -8,8 +8,8 @@
       "chain": "rococo-local",
       "default_command": "./polkadot",
       "genesis": {
-        "runtime": {
-          "runtime_genesis_config": {
+        "runtimeGenesis": {
+          "patch": {
             "balances": {
               "balances": {% include "../funded-accounts.json" %}
             }
