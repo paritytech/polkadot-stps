@@ -6,11 +6,7 @@ license = "GPL-3.0-only"
 
 [workspace]
 resolver = "2"
-members = [
-	"utils/funder",
-	"utils/sender",
-	"stps"
-]
+members = ["utils/funder", "utils/sender", "stps"]
 
 default-members = ["stps"]
 
