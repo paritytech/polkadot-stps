@@ -1,6 +1,6 @@
 use clap::Parser;
 use std::{error::Error, fs::File, path::PathBuf};
-use subxt::ext::sp_core::{crypto::Ss58Codec, Pair};
+use sp_core::{crypto::Ss58Codec, Pair};
 
 const DEFAULT_FUNDED_JSON_PATH: &str = "funded-accounts.json";
 const FUNDS: u64 = 10_000_000_000_000_000;

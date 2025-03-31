@@ -3,10 +3,15 @@ use log::*;
 use std::{error::Error, time::Duration};
 use subxt::{
 	config::polkadot::PolkadotExtrinsicParamsBuilder as Params,
+	config::substrate::AccountId32,
 	dynamic::Value,
-	ext::sp_core::{sr25519::Pair as SrPair, Pair},
-	tx::{PairSigner, SubmittableExtrinsic},
+	tx::{Signer, SubmittableTransaction},
 	OnlineClient, PolkadotConfig,
+};
+use sp_core::{sr25519::{self, Pair as SrPair}, Pair};
+use sp_runtime::{
+        traits::{IdentifyAccount, Verify},
+        MultiSignature,
 };
 
 /// Maximal number of connection attempts.
@@ -34,18 +39,16 @@ pub async fn connect(url: &str) -> Result<OnlineClient<PolkadotConfig>, Box<dyn 
 	Err(err.into())
 }
 
-pub type SignedTx = SubmittableExtrinsic<PolkadotConfig, OnlineClient<PolkadotConfig>>;
+pub type SignedTx = SubmittableTransaction<PolkadotConfig, OnlineClient<PolkadotConfig>>;
 
-pub fn sign_txs<P, S, E>(
-	// api: OnlineClient<PolkadotConfig>,
+pub fn sign_txs<P, S, C>(
 	params: impl Iterator<Item = P>,
 	signer: S,
-	// txs: impl Iterator<Item = (SrPair, SrPair)>,
-) -> Result<Vec<SignedTx>, Box<dyn Error>>
+) -> Vec<SignedTx>
 where
 	P: Send + 'static,
-	S: Fn(P) -> Result<SignedTx, E> + Send + Sync + 'static,
-	E: Error + Send + 'static,
+	S: Fn(P) -> SignedTx + Send + Sync + 'static,
+	C: subxt::Config,
 {
 	let t = std::thread::available_parallelism().unwrap_or(1usize.try_into().unwrap()).get();
 
@@ -63,18 +66,67 @@ where
 			.push(std::thread::spawn(move || chunk.into_iter().map(&*signer).collect::<Vec<_>>()));
 	});
 
-	Ok(threads
+	threads
 		.into_iter()
 		.map(|h| h.join().unwrap())
 		.flatten()
-		.collect::<Result<Vec<_>, _>>()?)
+		.collect()
 }
+
+#[derive(Clone)]
+pub struct PairSigner {
+	account_id: <PolkadotConfig as subxt::Config>::AccountId,
+	signer: sr25519::Pair,
+}
+
+impl PairSigner {
+	/// Creates a new [`Signer`] from an [`sp_core::sr25519::Pair`].
+	pub fn new(signer: sr25519::Pair) -> Self {
+		let account_id =
+			<MultiSignature as Verify>::Signer::from(signer.public()).into_account();
+		Self {
+			// Convert `sp_core::AccountId32` to `subxt::config::substrate::AccountId32`.
+			//
+			// This is necessary because we use `subxt::config::substrate::AccountId32` and no
+			// From/Into impls are provided between `sp_core::AccountId32` because `polkadot-sdk` isn't a direct
+			// dependency in subxt.
+			//
+			// This can also be done by provided a wrapper type around `subxt::config::substrate::AccountId32` to implement
+			// such conversions but that also most likely requires a custom `Config` with a separate `AccountId` type to work
+			// properly without additional hacks.
+			account_id: AccountId32(account_id.into()),
+			signer,
+		}
+	}
+
+	/// Returns the [`sp_core::sr25519::Pair`] implementation used to construct this.
+	pub fn signer(&self) -> &sr25519::Pair {
+		&self.signer
+	}
+
+	/// Return the account ID.
+	pub fn account_id(&self) -> &AccountId32 {
+		&self.account_id
+	}
+}
+
+impl Signer<PolkadotConfig> for PairSigner {
+	fn account_id(&self) -> <PolkadotConfig as subxt::Config>::AccountId {
+		self.account_id.clone()
+	}
+
+	fn sign(&self, signer_payload: &[u8]) -> <PolkadotConfig as subxt::Config>::Signature {
+		let signature = self.signer.sign(signer_payload);
+		subxt::utils::MultiSignature::Sr25519(signature.0)
+	}
+}
+
 
 pub fn sign_balance_transfers(
 	api: OnlineClient<PolkadotConfig>,
 	pairs: impl Iterator<Item = ((SrPair, u64), SrPair)>,
-) -> Result<Vec<SignedTx>, Box<dyn Error>> {
-	sign_txs(pairs, move |((sender, nonce), receiver)| {
+) -> Vec<SignedTx> {
+	sign_txs::<_, _, PolkadotConfig>(pairs, move |((sender, nonce), receiver)| {
 		let signer = PairSigner::new(sender);
 		let tx_params = Params::new().nonce(nonce).build();
 		let tx_call = subxt::dynamic::tx(
@@ -85,13 +137,13 @@ pub fn sign_balance_transfers(
 				Value::u128(1u32.into()),
 			],
 		);
-		api.tx().create_signed_offline(&tx_call, &signer, tx_params)
+		api.tx().create_partial_offline(&tx_call, tx_params).expect("Failed to create partial offline transaction").sign(&signer)
 	})
 }
 
 /// Here the signed extrinsics are submitted.
 pub async fn submit_txs(
-	txs: Vec<SubmittableExtrinsic<PolkadotConfig, OnlineClient<PolkadotConfig>>>,
+	txs: Vec<SubmittableTransaction<PolkadotConfig, OnlineClient<PolkadotConfig>>>,
 ) -> Result<(), Box<dyn Error>> {
 	let futs = txs.iter().map(|tx| tx.submit_and_watch()).collect::<FuturesUnordered<_>>();
 	let res = futs.collect::<Vec<_>>().await;
@@ -102,8 +154,7 @@ pub async fn submit_txs(
 		match a {
 			Ok(st) => match st {
 				subxt::tx::TxStatus::Validated => log::trace!("VALIDATED"),
-				subxt::tx::TxStatus::Broadcasted { num_peers } =>
-					log::trace!("BROADCASTED TO {num_peers}"),
+				subxt::tx::TxStatus::Broadcasted =>	log::trace!("BROADCASTED"),
 				subxt::tx::TxStatus::NoLongerInBestBlock => log::warn!("NO LONGER IN BEST BLOCK"),
 				subxt::tx::TxStatus::InBestBlock(_) => log::trace!("IN BEST BLOCK"),
 				subxt::tx::TxStatus::InFinalizedBlock(_) => log::trace!("IN FINALIZED BLOCK"),
