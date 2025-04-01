@@ -9,16 +9,25 @@ resolver = "2"
 members = [
 	"utils/funder",
 	"utils/sender",
-	"stps"
+	"stps",
+	"utils/config"
 ]
 
 default-members = ["stps"]
 
 [workspace.dependencies]
-sp-core = "31.0.0"
+sp-core = "29.0.0"
 sp-runtime = "32.0.0"
 sp-keyring = "32.0.0"
 subxt = { version = "0.41" }
-frame-system = "31.0.0"
-pallet-balances = "31.0.0"
+frame-system = "29.0.0"
+pallet-balances = "29.0.0"
 reqwest = "0.11"
+jsonrpsee-client-transport = { version = "0.24.8", features = [ "ws" ] }
+jsonrpsee-core = { version = "0.24.8", features = [ "async-client" ] }
+codec = { package = "parity-scale-codec", version = "3.6.1", features = ["derive", "max-encoded-len", "full", "bit-vec"] }
+hex = { version = "0.4.3", features = ["alloc"] }
+impl-serde = { version = "0.4.0" }
+libsecp256k1 = { version = "0.7.1" }
+scale-info = { version = "2.10.0", features = ["derive"] }
+serde = { version = "1.0.188", features = ["derive"] }

@@ -1,0 +1,18 @@
+[package]
+name = "stps-config"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+description = "Configuration types for STPS"
+
+[dependencies]
+codec.workspace = true
+hex.workspace = true
+impl-serde.workspace = true
+libsecp256k1.workspace = true
+scale-info.workspace = true
+serde.workspace = true
+sp-core.workspace = true
+sp-runtime.workspace = true
+subxt.workspace = true
+sha3 = { version = "0.10.8", default-features = false }
