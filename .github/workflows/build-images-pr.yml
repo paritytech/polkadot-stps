@@ -24,7 +24,7 @@ jobs:
           password: ${{ secrets.PR_DOCKERHUB_PASSWORD }}
 
       - name: Build Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./utils/dockerfiles/Dockerfile.sender-any
