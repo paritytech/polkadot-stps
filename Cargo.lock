@@ -5319,6 +5319,7 @@ dependencies = [
  "parity-scale-codec",
  "rand 0.9.0",
  "sp-core 29.0.0",
+ "sp-runtime",
  "stps-config",
  "subxt 0.41.0",
  "subxt-signer 0.41.0",
