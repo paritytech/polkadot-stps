@@ -1,15 +1,16 @@
 use frame_system::Config;
 use futures::{stream::FuturesUnordered, StreamExt};
 use log::*;
+use stps_config::eth::{EthereumSigner, MythicalConfig};
 use std::{error::Error, time::Duration};
 use subxt::{
-	config::polkadot::PolkadotExtrinsicParamsBuilder as Params,
 	dynamic::Value,
 	tx::{Signer, SubmittableTransaction},
 	OnlineClient,
 };
-use sp_core::{sr25519::Pair as SrPair, Pair};
-
+use sp_core::crypto::Pair;
+use subxt::config::DefaultExtrinsicParamsBuilder;
+use sp_core::ecdsa;
 /// Maximal number of connection attempts.
 const MAX_ATTEMPTS: usize = 10;
 /// Delay period between failed connection attempts.
@@ -69,24 +70,24 @@ where
 		.collect()
 }
 
-// pub fn sign_balance_transfers<C>(
-// 	api: OnlineClient<PolkadotConfig>,
-// 	pairs: impl Iterator<Item = ((SrPair, u64), SrPair)>,
-// ) -> Result<Vec<SignedTx>, Box<dyn Error>> {
-// 	sign_txs(pairs, move |((sender, nonce), receiver)| {
-// 		let signer = PairSigner::new(sender);
-// 		let tx_params = Params::new().nonce(nonce).build();
-// 		let tx_call = subxt::dynamic::tx(
-// 			"Balances",
-// 			"transfer_keep_alive",
-// 			vec![
-// 				Value::unnamed_variant("Id", [Value::from_bytes(receiver.public())]),
-// 				Value::u128(1u32.into()),
-// 			],
-// 		);
-// 		api.tx().create_signed_offline(&tx_call, &signer, tx_params)
-// 	})
-// }
+pub fn sign_balance_transfers(
+	api: OnlineClient<MythicalConfig>,
+	pairs: impl Iterator<Item = ((ecdsa::Pair, u64), ecdsa::Pair)>,
+) -> Vec<SignedTx<MythicalConfig>> {
+	sign_txs(pairs, move |((sender, nonce), receiver)| {
+		let signer = EthereumSigner::from(sender);
+		let tx_params = DefaultExtrinsicParamsBuilder::new().nonce(nonce).build();
+		let tx_call = subxt::dynamic::tx(
+			"Balances",
+			"transfer_keep_alive",
+			vec![
+				Value::from_bytes(EthereumSigner::from(receiver).account_id().0),
+				Value::u128(((rand::random::<u32>() as u64) * 1000 / u32::MAX as u64).into()),
+			],
+		);
+		api.tx().create_partial_offline(&tx_call, tx_params).unwrap().sign(&signer)
+	})
+}
 
 /// Here the signed extrinsics are submitted.
 pub async fn submit_txs<C: subxt::Config>(

@@ -11,6 +11,7 @@ stps-config = { path = "../config" }
 log = "0.4.16"
 env_logger = "0.10.0"
 subxt.workspace = true
+subxt-signer.workspace = true
 clap = { version = "4.3.0", features = ["derive"] }
 tokio = { version = "1.28.2", features = ["rt-multi-thread", "macros", "time"] }
 codec.workspace = true
@@ -21,11 +22,16 @@ url = "2.5"
 jsonrpsee-client-transport.workspace = true
 jsonrpsee-core.workspace = true
 sp-core.workspace = true
+rand = { version = "0.9.0" }
 
 [lib]
 name = "sender_lib"
 path = "src/lib.rs"
 
 [[bin]]
-name = "sender"
+name = "spammer"
 path = "src/main.rs"
+
+[[bin]]
+name = "sender"
+path = "src/sender.rs"
