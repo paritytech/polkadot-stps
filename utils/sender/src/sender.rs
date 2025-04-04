@@ -1,9 +1,11 @@
+use codec::Encode;
 use futures::{stream::FuturesUnordered, StreamExt};
 use clap::Parser;
 use clap::ValueEnum;
 use codec::Decode;
 use log::*;
 use sender_lib::{connect, sign_balance_transfers};
+use sp_core::U256;
 use std::sync::Mutex;
 use std::{collections::HashMap, error::Error};
 use subxt::OnlineClient;
@@ -24,6 +26,8 @@ enum Mode {
 	Balance,
 	/// Transfer NFTs
 	NftTransfer,
+    /// Create marketplace orders
+    Marketplace,
 }
 
 /// Util program to send transactions
@@ -106,9 +110,16 @@ struct Collection {
 }
 
 #[derive(Decode)]
+struct Mint {
+	clid: [u64; 4],
+	item_id: u128,
+	owner: AccountId20,
+}
+
+#[derive(Decode)]
 enum FinalizedEvent {
 	NftCollectionCreated(Collection),
-	NftMinted,
+	NftMinted(Mint),
 }
 
 async fn block_subscriber(
@@ -168,7 +179,9 @@ async fn block_subscriber(
 				("Nfts", "Issued") => {
 					proc_mint += 1;
 					if let Some(ref sender) = coll_sender {
-						sender.send(FinalizedEvent::NftMinted).expect("Sender sends");
+						let b = ev.field_bytes();
+						let m = Mint::decode(&mut &b[..])?;
+						sender.send(FinalizedEvent::NftMinted(m)).expect("Sender sends");
 					}
 				},
 				_ => ()
@@ -252,7 +265,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     info!("Funding accounts");
     
     const ED: u128 = 10_000_000_000_000_000;
-    const BATCH_BY: usize = 250;
+    const BATCH_BY: usize = 25;
 
     let alith = ecdsa::Pair::from_seed(&subxt_signer::eth::dev::alith().secret_key());
     let alith_signer = EthereumSigner::from(alith.clone());
@@ -275,7 +288,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 "transfer_keep_alive",
                 vec![
                     TxValue::from_bytes(EthereumSigner::from(acc.clone()).account_id().0),
-                    TxValue::u128(ED),
+                    TxValue::u128(30 * ED),
                 ],
             ).into_value()
         ));
@@ -414,31 +427,189 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let _res = futs.collect::<Vec<_>>().await.into_iter().collect::<Result<Vec<_>, _>>().expect("All the mint transactions submitted successfully");
 
         let mut proc_mint = 0;
+        // let mut mint_map: HashMap<AccountId20, ([u64; 4], u128)> = HashMap::new();
         while proc_mint < n_tx_sender {
             let e = coll_recv.recv().await.expect("Receiver receives");
-            if !matches!(e, FinalizedEvent::NftMinted) {
+            if !matches!(e, FinalizedEvent::NftMinted(_)) {
                 panic!("Unexpected event");
             }
+            // match e {
+            //     FinalizedEvent::NftMinted(m) => {
+            //         mint_map.insert(m.owner, (m.clid, m.item_id));
+            //     }
+            //     _ => {
+            //         panic!("Unexpected event");
+            //     }
+            // }
             proc_mint += 1;
         }
 
+        // let mut mints = Vec::new();
+        // for s in accs_with_nonces(&mut noncemap, sender_accounts.clone().into_iter()) {
+        //     let mint = mint_map.get(&EthereumSigner::from(s.0.clone()).into_account()).expect("Mint exists");
+        //     mints.push((s.0, mint.0, mint.1, s.1));
+        // }
+
+        // info!("Minted {} NFTs", mints.len());
+
         let api2 = api.clone();
 
-        sender_lib::sign_txs(cll.into_iter().zip(receiver_accounts.into_iter()), move |(coll, receiver)| {
-            let signer = EthereumSigner::from(coll.0);
-            let tx_params = DefaultExtrinsicParamsBuilder::<MythicalConfig>::new().nonce(coll.2 + 1).build();
-            let tx_call = subxt::dynamic::tx(
-                "Nfts",
-                "transfer",
-                vec![
-                    TxValue::unnamed_composite(coll.1.into_iter().map(|a| a.into())),
-                    TxValue::u128(1u128),
-                    TxValue::from_bytes(&EthereumSigner::from(receiver).into_account().0),
-                ],
-            );
+        if matches!(args.mode, Mode::NftTransfer) {
+            sender_lib::sign_txs(cll.into_iter().zip(receiver_accounts.into_iter()), move |(coll, receiver)| {
+                let signer = EthereumSigner::from(coll.0);
+                let tx_params = DefaultExtrinsicParamsBuilder::<MythicalConfig>::new().nonce(coll.2 + 1).build();
+                let tx_call = subxt::dynamic::tx(
+                    "Nfts",
+                    "transfer",
+                    vec![
+                        TxValue::unnamed_composite(coll.1.into_iter().map(|a| a.into())),
+                        TxValue::u128(1u128),
+                        TxValue::from_bytes(&EthereumSigner::from(receiver).into_account().0),
+                    ],
+                );
 
-            api2.tx().create_partial_offline(&tx_call, tx_params).expect("Transaction created").sign(&signer)
-        })
+                api2.tx().create_partial_offline(&tx_call, tx_params).expect("Transaction created").sign(&signer)
+            })
+        } else {
+            use rand::distr::{Alphanumeric, SampleString};
+
+            fn myth_timestamp_now() -> u64 {
+                use std::time::{SystemTime, UNIX_EPOCH};
+                let duration = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .expect("system time");
+                duration.as_millis() as u64
+            }
+
+            #[derive(Encode)]
+            pub struct OrderMessage {
+                pub collection: U256,
+                pub item: u128,
+                pub price: u128,
+                pub expires_at: u64,
+                pub fee: u128,
+                pub escrow_agent: Option<AccountId20>,
+                pub nonce: String,
+            }
+
+            let fee_signer = EthereumSigner::from(ecdsa::Pair::from_seed(&subxt_signer::eth::dev::faith().secret_key()));
+            let fee_signer2 = fee_signer.clone();
+            let api2 = api.clone();
+
+            let ask_txs = sender_lib::sign_txs(cll.clone().into_iter(), move |coll| {
+                let order_nonce: String = Alphanumeric.sample_string(&mut rand::rng(), 9);
+                let expires_at = myth_timestamp_now() + 9_000_001;
+
+                let order_msg = OrderMessage {
+                    collection: U256(coll.1),
+                    item: 1u128,
+                    price: 1u128,
+                    expires_at,
+                    fee: 1u128,
+                    escrow_agent: None,
+                    nonce: order_nonce.clone(),
+                };
+                let order_bytes = order_msg.encode();
+                let signature = fee_signer.sign(&order_bytes[..]);
+                let tx_params = DefaultExtrinsicParamsBuilder::new().nonce(coll.2 + 1).build();
+                let tx_call = subxt::dynamic::tx(
+                    "Marketplace",
+                    "create_order",
+                    vec![ 
+                        //TxValue::named_composite(vec![
+                            ("order", TxValue::named_composite(vec![
+                                ("order_type", TxValue::unnamed_variant("Ask", vec![])),
+                                ("collection", TxValue::unnamed_composite(coll.1.into_iter().map(|a| a.into()))),
+                                ("item", TxValue::u128(1u128)),
+                                ("price", TxValue::u128(1u128)),
+                                ("expires_at", TxValue::primitive(expires_at.into())),
+                                ("fee", TxValue::u128(1u128)),
+                                ("escrow_agent", TxValue::unnamed_variant("None", vec![])),
+                                ("signature_data", TxValue::named_composite(vec![
+                                    ("signature", TxValue::from_bytes(&signature)),
+                                    ("nonce", TxValue::from_bytes(Vec::from(order_nonce))),
+                                ])),
+                            ])),
+                            ("execution", TxValue::unnamed_variant("AllowCreation", vec![])),
+                        //]),
+                    ]);
+                api2.tx().create_partial_offline(&tx_call, tx_params).expect("Transaction created").sign(&EthereumSigner::from(coll.0))
+            });
+
+            info!("Submitting ask order transactions");
+            let futs = ask_txs.iter().map(|tx| tx.submit_and_watch()).collect::<FuturesUnordered<_>>();
+            let submitted = futs.collect::<Vec<_>>().await.into_iter().collect::<Result<Vec<_>, _>>().expect("All the ask order transactions submitted successfully");
+            let res = submitted.into_iter().map(|tx| tx.wait_for_finalized()).collect::<FuturesUnordered<_>>();
+            let _ = res.collect::<Vec<_>>().await.into_iter().collect::<Result<Vec<_>, _>>().expect("All the ask order transactions finalized successfully");
+            info!("Ask order transactions finalized");
+
+            let futs = receiver_accounts.iter().map(|a| {
+                let account_id = EthereumSigner::from(a.clone()).account_id();
+                let fapi = api.clone();
+                async move {
+                    let nonce = get_nonce(&fapi, account_id).await;
+
+                    (a.clone(), nonce)
+                }
+            }).collect::<FuturesUnordered<_>>();
+            let recv_noncemap = futs.collect::<Vec<_>>().await; //.into_iter().collect::<HashMap<_, _>>();
+            info!("Got receiver nonces, sending bid orders");
+
+            let api2 = api.clone();
+
+            sender_lib::sign_txs(cll.clone().into_iter().zip(recv_noncemap.into_iter()), move |((_, clid, _), (buyer, nonce))| {
+                let order_nonce: String = Alphanumeric.sample_string(&mut rand::rng(), 9);
+                let expires_at = myth_timestamp_now() + 9_000_001;
+
+                let order_msg = OrderMessage {
+                    collection: U256(clid),
+                    item: 1u128,
+                    price: 1u128,
+                    expires_at,
+                    fee: 1u128,
+                    escrow_agent: None,
+                    nonce: order_nonce.clone(),
+                };
+                let order_bytes = order_msg.encode();
+                let signature = fee_signer2.sign(&order_bytes[..]);
+                let tx_params = DefaultExtrinsicParamsBuilder::new().nonce(nonce).build();
+                let tx_call = subxt::dynamic::tx(
+                    "Marketplace",
+                    "create_order",
+                    vec![ 
+                        //TxValue::named_composite(vec![
+                            ("order", TxValue::named_composite(vec![
+                                ("order_type", TxValue::unnamed_variant("Bid", vec![])),
+                                ("collection", TxValue::unnamed_composite(clid.into_iter().map(Into::into))),
+                                ("item", TxValue::u128(1u128)),
+                                ("price", TxValue::u128(1u128)),
+                                ("expires_at", TxValue::primitive(expires_at.into())),
+                                ("fee", TxValue::u128(1u128)),
+                                ("escrow_agent", TxValue::unnamed_variant("None", vec![])),
+                                ("signature_data", TxValue::named_composite(vec![
+                                    ("signature", TxValue::from_bytes(&signature)),
+                                    ("nonce", TxValue::from_bytes(Vec::from(order_nonce))),
+                                ])),
+                            ])),
+                            ("execution", TxValue::unnamed_variant("Force", vec![])),
+                        //]),
+                    ]);
+                api2.tx().create_partial_offline(&tx_call, tx_params).expect("Transaction created").sign(&EthereumSigner::from(buyer))
+            })
+
+
+
+            // info!("Submitting ask order transactions");
+            // let futs = ask_txs.iter().map(|tx| {
+            //     info!("Submitting ask order transaction {:?}", tx.encoded());
+            //     tx.submit()
+            // }).collect::<FuturesUnordered<_>>();
+            // info!("Collected ask order transactions");
+            // let _res = futs.collect::<Vec<_>>().await.into_iter().collect::<Result<Vec<_>, _>>().expect("All the ask order transactions submitted successfully");
+            // info!("Submitted ask order transactions");
+            // todo!();
+            // bid_txs
+        }
     };
 	let elapsed = now.elapsed();
 	info!("Signed in {:?}", elapsed);
