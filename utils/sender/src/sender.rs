@@ -265,7 +265,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     info!("Funding accounts");
     
     const ED: u128 = 10_000_000_000_000_000;
-    const BATCH_BY: usize = 25;
+    const BATCH_BY: usize = 250;
 
     let alith = ecdsa::Pair::from_seed(&subxt_signer::eth::dev::alith().secret_key());
     let alith_signer = EthereumSigner::from(alith.clone());
@@ -278,7 +278,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 "transfer_keep_alive",
                 vec![
                     TxValue::from_bytes(EthereumSigner::from(acc.clone()).account_id().0),
-                    TxValue::u128(30 * ED),
+                    TxValue::u128(300 * ED),
                 ],
             ).into_value()
         ).collect::<Vec<_>>();
@@ -288,7 +288,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 "transfer_keep_alive",
                 vec![
                     TxValue::from_bytes(EthereumSigner::from(acc.clone()).account_id().0),
-                    TxValue::u128(30 * ED),
+                    TxValue::u128(300 * ED),
                 ],
             ).into_value()
         ));
