@@ -120,6 +120,12 @@ impl From<ecdsa::Pair> for EthereumSigner {
 	}
 }
 
+impl From<ecdsa::Pair> for AccountId20 {
+	fn from(pair: ecdsa::Pair) -> Self {
+		EthereumSigner::from(pair).into_account()
+	}
+}
+
 impl Signer<MythicalConfig> for EthereumSigner {
     fn account_id(&self) -> <MythicalConfig as Config>::AccountId {
         self.account_id
