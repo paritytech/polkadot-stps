@@ -1,4 +1,3 @@
-use frame_system::Config;
 use futures::{stream::FuturesUnordered, StreamExt};
 use log::*;
 use stps_config::eth::{EthereumSigner, MythicalConfig};
@@ -8,7 +7,6 @@ use subxt::{
 	tx::{Signer, SubmittableTransaction},
 	OnlineClient,
 };
-use sp_core::crypto::Pair;
 use subxt::config::DefaultExtrinsicParamsBuilder;
 use sp_core::ecdsa;
 /// Maximal number of connection attempts.
@@ -36,7 +34,7 @@ pub async fn connect<C: subxt::Config>(url: &str) -> Result<OnlineClient<C>, Box
 	Err(err.into())
 }
 
-pub type SignedTx<C: subxt::Config> = SubmittableTransaction<C, OnlineClient<C>>;
+pub type SignedTx<C> = SubmittableTransaction<C, OnlineClient<C>>;
 
 pub fn sign_txs<P, S, C>(
 	params: impl Iterator<Item = P>,

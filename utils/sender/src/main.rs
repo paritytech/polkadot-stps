@@ -1,5 +1,5 @@
 use clap::Parser;
-use codec::Decode;
+use parity_scale_codec::{Compact, Decode};
 use futures::TryStreamExt;
 use log::*;
 use std::{
@@ -13,12 +13,11 @@ use subxt::{
 	blocks::BlockRef,
 	config::polkadot::PolkadotExtrinsicParamsBuilder as Params,
 	dynamic::Value,
-	tx::Signer,
-	OnlineClient, PolkadotConfig,
+	OnlineClient,
 };
 use tokio::sync::RwLock;
 use sp_core::{ecdsa, Pair};
-use stps_config::eth::{EthereumSigner, MythicalConfig};
+use stps_config::eth::EthereumSigner;
 
 const SENDER_SEED: &str = "//Sender";
 const RECEIVER_SEED: &str = "//Receiver";
@@ -289,7 +288,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 							match (ex.pallet_name().expect("pallet name"), ex.variant_name().expect("variant name")) {
 								("Timestamp", "set") => {
-									let new_timestamp = Duration::from_millis(codec::Compact::<u64>::decode(&mut &ex.field_bytes()[..]).expect("timestamp decodes").0);
+									let new_timestamp = Duration::from_millis(Compact::<u64>::decode(&mut &ex.field_bytes()[..]).expect("timestamp decodes").0);
 									block_time =  new_timestamp - timestamp;
 									timestamp = new_timestamp;
 								},

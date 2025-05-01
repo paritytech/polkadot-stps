@@ -1,4 +1,4 @@
-use codec::{Decode, Encode, MaxEncodedLen};
+use parity_scale_codec::{Decode, Encode, MaxEncodedLen};
 use sp_core::{ecdsa, H160, keccak_256, Pair};
 use sp_runtime::traits::IdentifyAccount;
 use subxt::{
@@ -6,7 +6,6 @@ use subxt::{
 	tx::Signer,
 };
 use sha3::{Keccak256, Digest};
-use std::str::FromStr;
 
 #[derive(
 	Eq, PartialEq, Copy, Clone, Encode, Decode, MaxEncodedLen, Default, PartialOrd, Ord, Hash
