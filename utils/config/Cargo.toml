@@ -6,7 +6,7 @@ authors.workspace = true
 description = "Configuration types for STPS"
 
 [dependencies]
-codec.workspace = true
+parity-scale-codec.workspace = true
 hex.workspace = true
 impl-serde.workspace = true
 libsecp256k1.workspace = true

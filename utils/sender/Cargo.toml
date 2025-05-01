@@ -14,7 +14,7 @@ subxt.workspace = true
 subxt-signer.workspace = true
 clap = { version = "4.3.0", features = ["derive"] }
 tokio = { version = "1.28.2", features = ["rt-multi-thread", "macros", "time"] }
-codec.workspace = true
+parity-scale-codec.workspace = true
 futures = "0.3.28"
 frame-system.workspace = true
 pallet-balances.workspace = true
