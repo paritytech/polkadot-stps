@@ -1,4 +1,5 @@
-use sp_core::Pair;
+pub use sp_core::{ Pair, ecdsa };
+
 
 pub fn derive_accounts<T>(n: usize, seed: String) -> Vec<T>
 where T: Pair + Send + 'static
