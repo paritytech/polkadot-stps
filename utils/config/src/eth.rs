@@ -1,6 +1,6 @@
 use parity_scale_codec::{Decode, Encode, MaxEncodedLen};
 use sp_core::{ecdsa, H160, keccak_256, Pair};
-use sp_runtime::traits::IdentifyAccount;
+pub use sp_runtime::traits::IdentifyAccount;
 use subxt::{
 	config::Config,
 	tx::Signer,
@@ -112,7 +112,7 @@ impl From<ecdsa::Pair> for EthereumSigner {
 			.serialize();
 		let mut m = [0u8; 64];
 		m.copy_from_slice(&decompressed[1..65]);
-		Self { 
+		Self {
 			account_id: H160::from_slice(&Keccak256::digest(m).as_slice()[12..32]).into(),
 			signer: pair
 		}
