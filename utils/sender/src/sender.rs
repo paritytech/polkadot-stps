@@ -1,8 +1,8 @@
-use codec::Encode;
+use parity_scale_codec::Encode;
 use futures::{stream::FuturesUnordered, StreamExt};
 use clap::Parser;
 use clap::ValueEnum;
-use codec::Decode;
+use parity_scale_codec::Decode;
 use log::*;
 use sender_lib::{connect, sign_balance_transfers};
 use sp_core::U256;

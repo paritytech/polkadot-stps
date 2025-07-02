@@ -610,6 +610,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "bit-set"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08807e080ed7f9d5433fa9b275196cfc35414f66a0c79d864dc51a0d825231a3"
+dependencies = [
+ "bit-vec",
+]
+
+[[package]]
+name = "bit-vec"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e764a1d40d510daf35e07be9eb06e75770908c27d411ee6c92109c9840eaaf7"
+
+[[package]]
 name = "bitcoin-internals"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1640,6 +1655,17 @@ name = "fallible-iterator"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4443176a9f2c162692bd3d352d745ef9413eec5782a80d8fd6f8a1ac692a07f7"
+
+[[package]]
+name = "fancy-regex"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e24cb5a94bcae1e5408b0effca5cd7172ea3c5755049c5f3af4cd283a165298"
+dependencies = [
+ "bit-set",
+ "regex-automata 0.4.9",
+ "regex-syntax 0.8.5",
+]
 
 [[package]]
 name = "fastrand"
@@ -8396,7 +8422,8 @@ dependencies = [
 
 [[package]]
 name = "zombienet-configuration"
-version = "0.2.27"
+version = "0.3.7"
+source = "git+https://github.com/paritytech/zombienet-sdk?branch=main#3d7cceb6f188b6d1b010ca305db84a338b876a18"
 dependencies = [
  "anyhow",
  "lazy_static",
@@ -8415,10 +8442,12 @@ dependencies = [
 
 [[package]]
 name = "zombienet-orchestrator"
-version = "0.2.27"
+version = "0.3.7"
+source = "git+https://github.com/paritytech/zombienet-sdk?branch=main#3d7cceb6f188b6d1b010ca305db84a338b876a18"
 dependencies = [
  "anyhow",
  "async-trait",
+ "fancy-regex",
  "futures",
  "glob-match",
  "hex",
@@ -8446,7 +8475,8 @@ dependencies = [
 
 [[package]]
 name = "zombienet-prom-metrics-parser"
-version = "0.2.27"
+version = "0.3.7"
+source = "git+https://github.com/paritytech/zombienet-sdk?branch=main#3d7cceb6f188b6d1b010ca305db84a338b876a18"
 dependencies = [
  "pest",
  "pest_derive",
@@ -8455,7 +8485,8 @@ dependencies = [
 
 [[package]]
 name = "zombienet-provider"
-version = "0.2.27"
+version = "0.3.7"
+source = "git+https://github.com/paritytech/zombienet-sdk?branch=main#3d7cceb6f188b6d1b010ca305db84a338b876a18"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8484,7 +8515,8 @@ dependencies = [
 
 [[package]]
 name = "zombienet-sdk"
-version = "0.2.27"
+version = "0.3.7"
+source = "git+https://github.com/paritytech/zombienet-sdk?branch=main#3d7cceb6f188b6d1b010ca305db84a338b876a18"
 dependencies = [
  "async-trait",
  "futures",
@@ -8500,15 +8532,18 @@ dependencies = [
 
 [[package]]
 name = "zombienet-support"
-version = "0.2.27"
+version = "0.3.7"
+source = "git+https://github.com/paritytech/zombienet-sdk?branch=main#3d7cceb6f188b6d1b010ca305db84a338b876a18"
 dependencies = [
  "anyhow",
  "async-trait",
  "futures",
+ "lazy_static",
  "nix",
  "rand 0.8.5",
  "regex",
  "reqwest 0.12.9",
+ "serde_json",
  "thiserror 1.0.69",
  "tokio",
  "tracing",

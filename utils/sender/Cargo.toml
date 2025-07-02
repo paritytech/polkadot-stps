@@ -36,3 +36,7 @@ path = "src/main.rs"
 [[bin]]
 name = "sender"
 path = "src/sender.rs"
+
+[[bin]]
+name = "filler"
+path = "src/filler.rs"
