@@ -158,7 +158,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 						"transfer_keep_alive",
 						vec![
 							Value::unnamed_variant("Id", [Value::from_bytes(sender.public())]),
-							Value::u128(1000000000000000000),
+							Value::u128(100000000000000000000),
 						],
 					);
 
