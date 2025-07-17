@@ -17,8 +17,8 @@ futures = "0.3.28"
 frame-system.workspace = true
 pallet-balances.workspace = true
 url = "2.5"
-jsonrpsee-client-transport = "0.22"
-jsonrpsee-core = "0.22"
+jsonrpsee-client-transport = { version = "0.24", features=["ws"] }
+jsonrpsee-core = {version = "0.24", features=["async-client"] }
 
 [lib]
 name = "sender_lib"

@@ -3510,7 +3510,7 @@ dependencies = [
  "env_logger 0.10.2",
  "log",
  "serde_json",
- "subxt 0.37.0",
+ "subxt 0.38.1",
 ]
 
 [[package]]
@@ -9924,12 +9924,12 @@ dependencies = [
  "frame-system 31.0.0",
  "funder",
  "futures",
- "jsonrpsee-client-transport 0.22.4",
- "jsonrpsee-core 0.22.4",
+ "jsonrpsee-client-transport 0.24.7",
+ "jsonrpsee-core 0.24.7",
  "log",
  "pallet-balances 31.0.0",
  "parity-scale-codec",
- "subxt 0.37.0",
+ "subxt 0.38.1",
  "tokio",
  "url",
 ]
@@ -12258,9 +12258,9 @@ dependencies = [
 
 [[package]]
 name = "subxt"
-version = "0.38.0"
+version = "0.38.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c53029d133e4e0cb7933f1fe06f2c68804b956de9bb8fa930ffca44e9e5e4230"
+checksum = "1c17d7ec2359d33133b63c97e28c8b7cd3f0a5bc6ce567ae3aef9d9e85be3433"
 dependencies = [
  "async-trait",
  "derive-where",
@@ -14370,7 +14370,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.8",
  "sp-core 31.0.0",
- "subxt 0.38.0",
+ "subxt 0.38.1",
  "subxt-signer",
  "thiserror",
  "tokio",
@@ -14430,7 +14430,7 @@ dependencies = [
  "async-trait",
  "futures",
  "lazy_static",
- "subxt 0.38.0",
+ "subxt 0.38.1",
  "tokio",
  "zombienet-configuration",
  "zombienet-orchestrator",

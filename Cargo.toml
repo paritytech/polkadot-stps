@@ -18,7 +18,7 @@ default-members = ["stps"]
 sp-core = "31.0.0"
 sp-runtime = "32.0.0"
 sp-keyring = "32.0.0"
-subxt = { version = "0.37", features = ["substrate-compat"] }
+subxt = { version = "0.38.1", features = ["substrate-compat"] }
 frame-system = "31.0.0"
 pallet-balances = "31.0.0"
 reqwest = "0.11"
