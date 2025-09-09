@@ -10,16 +10,14 @@ use std::{
 };
 // use subxt::{ext::sp_core::Pair, utils::AccountId32, OnlineClient, PolkadotConfig};
 
-use subxt::{
-	blocks::BlockRef,
-	config::polkadot::PolkadotExtrinsicParamsBuilder as Params,
-	dynamic::Value,
-	OnlineClient, PolkadotConfig,
-};
 use sp_core::{sr25519::Pair as SrPair, Pair};
+use subxt::{
+	blocks::BlockRef, config::polkadot::PolkadotExtrinsicParamsBuilder as Params, dynamic::Value,
+	tx::SubmittableTransaction, OnlineClient, PolkadotConfig,
+};
 use tokio::sync::RwLock;
 
-use sender_lib::{PairSigner, sign_balance_transfers};
+use sender_lib::PairSigner;
 
 const SENDER_SEED: &str = "//Sender";
 const RECEIVER_SEED: &str = "//Receiver";
@@ -118,7 +116,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 	let sender_accounts = funder_lib::derive_accounts(n_tx_sender, SENDER_SEED.to_owned());
 	let receiver_accounts = funder_lib::derive_accounts(n_tx_sender, RECEIVER_SEED.to_owned());
 	let alice = <SrPair as Pair>::from_string(&ALICE_SEED, None).unwrap();
-	let alice_signer = PairSigner::<PolkadotConfig, SrPair>::new(alice.clone());
+	let alice_signer = PairSigner::new(alice.clone());
 
 	async fn create_api(node_url: String) -> OnlineClient<PolkadotConfig> {
 		let node_url = url::Url::parse(&node_url).unwrap();
@@ -165,10 +163,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 					let tx_params = Params::new().nonce(nonce as u64).build();
 
-					let tx =
-						api.tx().create_signed_offline(&payload, &alice_signer, tx_params).unwrap();
+					let tx: SubmittableTransaction<_, OnlineClient<_>> = api
+						.tx()
+						.create_partial(&payload, &alice_signer.account_id(), tx_params)
+						.await
+						.unwrap()
+						.sign(&alice_signer);
 
-					let watch = match tx.submit_and_watch().await {
+					let _ = match tx.submit_and_watch().await {
 						Ok(watch) => {
 							log::info!("Seeded account");
 							nonce += 1;
@@ -228,9 +230,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 						let sent = sent.clone();
 
 						let sender = sender_accounts[i].clone();
-						let signer: PairSigner<PolkadotConfig, SrPair> = sender_signers[i].clone();
-						let alice_signer = PairSigner::<PolkadotConfig, SrPair>::new(alice.clone());
-						let alice = alice.clone();
+						let signer: PairSigner = sender_signers[i].clone();
 						let best_block = best_block.clone();
 						let sent = sent.clone();
 						let in_block = in_block.clone();
@@ -293,7 +293,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 								log::debug!("Sender {} using nonce {}", i, nonce);
 								let tx_params = Params::new().nonce(nonce as u64).build();
 
-								let tx = api
+								let tx: SubmittableTransaction::<_, OnlineClient<_>> = api
 									.tx()
 									.create_partial_offline(&tx_payload, tx_params)
 									.expect("Failed to create partial offline transaction")
