@@ -1,4 +1,4 @@
-use subxt::ext::sp_core::{sr25519::Pair as SrPair, Pair};
+use sp_core::{sr25519::Pair as SrPair, Pair};
 
 pub fn derive_accounts(n: usize, seed: String) -> Vec<SrPair> {
 	let t = std::cmp::min(
@@ -28,6 +28,5 @@ pub fn derive_accounts(n: usize, seed: String) -> Vec<SrPair> {
 		.into_iter()
 		.map(|h| h.join().unwrap())
 		.flatten()
-		// .map(|p| (p, funds))
 		.collect()
 }

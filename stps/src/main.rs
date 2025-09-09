@@ -1,27 +1,18 @@
-// use futures::StreamExt;
-// use clap::ValueEnum;
-// use subxt::tx::PairSigner;
-// use futures::stream::FuturesUnordered;
-// use std::collections::HashMap;
-// use subxt::config::substrate::AccountId32;
 use clap::{Parser, ValueEnum};
 use futures::{stream::FuturesUnordered, StreamExt};
 use jsonrpsee_client_transport::ws::WsTransportClientBuilder;
 use jsonrpsee_core::client::Client;
 use parity_scale_codec::{Compact, Decode};
+use sender_lib::PairSigner;
 use serde_json::json;
+use sp_core::{crypto::Ss58Codec, sr25519::Pair as SrPair, Pair};
 use std::{cmp::max, collections::HashMap, error::Error, sync::Arc, time::Duration};
 use subxt::{
-	backend::legacy::LegacyBackend,
-	config::DefaultExtrinsicParamsBuilder,
-	dynamic::Value as TxValue,
-	ext::sp_core::crypto::{Pair as _, Ss58Codec},
-	tx::PairSigner,
-	OnlineClient, PolkadotConfig,
+	backend::legacy::LegacyBackend, config::DefaultExtrinsicParamsBuilder,
+	dynamic::Value as TxValue, OnlineClient, PolkadotConfig,
 };
-use tokio::sync::mpsc::{self, Sender, UnboundedSender};
+use tokio::sync::mpsc::{self, UnboundedSender};
 use zombienet_sdk::{NetworkConfigBuilder, NetworkConfigExt, NetworkNode, RegistrationStrategy};
-
 mod metrics;
 use metrics::*;
 
@@ -99,6 +90,10 @@ struct Args {
 	#[arg(long)]
 	relay_chainspec: Option<String>,
 
+	/// Chainspec command template.
+	#[arg(long)]
+	relay_chainspec_command: Option<String>,
+
 	/// Number of validators.
 	#[arg(long, default_value_t = 2_usize)]
 	relay_nodes: usize,
@@ -127,6 +122,14 @@ struct Args {
 	/// to the default chain spec of the collator.
 	#[arg(long)]
 	para_chain: Option<String>,
+
+	/// Path to a custom parachain spec.
+	#[arg(long)]
+	para_chainspec: Option<String>,
+
+	/// Chainspec command template.
+	#[arg(long)]
+	para_chainspec_command: Option<String>,
 
 	/// Block height to wait for before starting the benchmark
 	#[arg(long, short, default_value_t = 5_usize)]
@@ -176,11 +179,6 @@ async fn wait_for_metric(
 	.await?
 }
 
-fn looks_like_filename<'a>(v: impl Into<&'a str>) -> bool {
-	let v: &str = v.into();
-	v.contains(".") || v.contains("/")
-}
-
 #[derive(Decode)]
 struct Collection {
 	clid: u32,
@@ -214,7 +212,6 @@ async fn block_subscriber(
 		let mut last_blocktime: u64 = 0;
 
 		for ex in block.extrinsics().await?.iter() {
-			let ex = ex?;
 			match (ex.pallet_name()?, ex.variant_name()?) {
 				("Timestamp", "set") => {
 					let timestamp: Compact<u64> = Decode::decode(&mut &ex.field_bytes()[..])?;
@@ -318,13 +315,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 		ntrans
 	};
 
-	let mut send_accs = funder_lib::derive_accounts(naccs, SENDER_SEED.to_owned());
-	let mut recv_accs = funder_lib::derive_accounts(naccs, RECEIVER_SEED.to_owned());
+	let mut send_accs: Vec<_> = funder_lib::derive_accounts(naccs, SENDER_SEED.to_owned());
+	let mut recv_accs: Vec<_> = funder_lib::derive_accounts(naccs, RECEIVER_SEED.to_owned());
 
 	let accs = send_accs
 		.iter()
 		.chain(recv_accs.iter())
-		.map(|p| (p.public().to_ss58check_with_version(args.ss58_prefix.into()), FUNDS))
+		.map(|p: &SrPair| (p.public().to_ss58check_with_version(args.ss58_prefix.into()), FUNDS))
 		.collect::<Vec<_>>();
 
 	let genesis_accs = json!({ "balances": { "balances": &serde_json::to_value(accs)? } });
@@ -338,6 +335,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 		let r = r.with_chain(args.relay_chain.as_str());
 		let r = if let Some(chainspec) = args.relay_chainspec {
 			r.with_chain_spec_path(chainspec.as_str())
+		} else if let Some(chainspec_command) = args.relay_chainspec_command {
+			r.with_chain_spec_command(chainspec_command)
 		} else {
 			r
 		};
@@ -362,10 +361,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 		//let r = if !args.para { r.with_genesis_overrides(genesis_accs.clone()) } else { r };
 		let r = r.with_genesis_overrides(json!({ "configuration": { "config": { "executor_params": [ { "MaxMemoryPages": 8192 }, { "PvfExecTimeout": [ "Backing", 2500 ] } ] } } } ));
 
-		let mut r = r.with_node(|node| node.with_name(relay_hostname.next().as_str()));
+		let mut r = r.with_node(|node| node.with_name(relay_hostname.next().as_str()).invulnerable(true));
 
 		for _ in 1..args.relay_nodes {
-			r = r.with_node(|node| node.with_name(relay_hostname.next().as_str()));
+			r = r.with_node(|node| node.with_name(relay_hostname.next().as_str()).invulnerable(true));
 		}
 
 		r
@@ -376,16 +375,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	} else {
 		let mut para_hostname = HostnameGen::new("collator");
 		relay.with_parachain(|p| {
-			let p = p.with_id(args.para_id).with_default_command(args.para_bin.as_str())
-				.with_chain_spec_command("{{mainCommand}} build-spec --extra-heap-pages 65000 --chain {{chainName}} {{disableBootnodes}}");
+			let p = p.with_id(args.para_id).with_default_command(args.para_bin.as_str());
+			//.with_chain_spec_command("{{mainCommand}} build-spec --extra-heap-pages 65000 --chain {{chainName}} {{disableBootnodes}}");
 
-			let p = if let Some(chain) = args.para_chain {
-				let chain = chain.as_str();
-				if looks_like_filename(chain) {
-					p.with_chain_spec_path(chain)
-				} else {
-					p.with_chain(chain)
-				}
+			let p =
+				if let Some(chain) = args.para_chain { p.with_chain(chain.as_str()) } else { p };
+
+			let p = if let Some(chainspec) = args.para_chainspec {
+				p.with_chain_spec_path(chainspec.as_str())
+			} else if let Some(chainspec_command) = args.para_chainspec_command {
+				p.with_chain_spec_command(chainspec_command)
 			} else {
 				p
 			};
@@ -472,7 +471,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 			sender_lib::sign_balance_transfers(
 				api.clone(),
 				send_accs.into_iter().map(|a| (a, 0)).zip(recv_accs.into_iter()),
-			)?
+			)
 			// let api = api.clone();
 			// sender_lib::sign_txs(send_accs.into_iter().zip(recv_accs.into_iter()), move |(sender, receiver)| {
 			// 	let signer = EthereumSigner::from(sender);
@@ -491,8 +490,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 		},
 		BenchMode::NftTransfer => {
 			let api2 = api.clone();
-			let create_coll_txs =
-				sender_lib::sign_txs(send_accs.clone().into_iter(), move |sender| {
+			let create_coll_txs = sender_lib::sign_txs::<_, _, PolkadotConfig>(
+				send_accs.clone().into_iter(),
+				move |sender| {
 					let tx_params = DefaultExtrinsicParamsBuilder::new().nonce(0).build();
 					let tx_call = subxt::dynamic::tx(
 						"Nfts",
@@ -515,8 +515,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 							]),
 						],
 					);
-					api2.tx().create_signed_offline(&tx_call, &PairSigner::new(sender), tx_params)
-				})?;
+					api2.tx()
+						.create_partial_offline(&tx_call, tx_params)
+						.expect("Failed to create partial offline transaction")
+						.sign(&PairSigner::new(sender))
+				},
+			);
 			let futs =
 				create_coll_txs.iter().map(|tx| tx.submit()).collect::<FuturesUnordered<_>>();
 			// let futs = create_coll_txs.iter().map(|tx| tx.submit_and_watch()).collect::<FuturesUnordered<_>>();
@@ -564,22 +568,28 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 			let api2 = api.clone();
 
-			let mint_txs = sender_lib::sign_txs(cll.clone().into_iter(), move |coll| {
-				let tx_params = DefaultExtrinsicParamsBuilder::new().nonce(1).build();
-				let tx_call = subxt::dynamic::tx(
-					"Nfts",
-					"mint",
-					vec![
-						TxValue::primitive(coll.1.into()),
-						TxValue::primitive(0u32.into()),
-						// TxValue::unnamed_composite(coll.1.into_iter().map(|a| a.into())),
-						// TxValue::unnamed_composite(vec![0u64.into(), 0u64.into(), 0u64.into(), 0u64.into()]),
-						TxValue::unnamed_variant("Id", [TxValue::from_bytes(coll.0.public())]),
-						TxValue::unnamed_variant("None", vec![]),
-					],
-				);
-				api2.tx().create_signed_offline(&tx_call, &PairSigner::new(coll.0), tx_params)
-			})?;
+			let mint_txs = sender_lib::sign_txs::<_, _, PolkadotConfig>(
+				cll.clone().into_iter(),
+				move |coll| {
+					let tx_params = DefaultExtrinsicParamsBuilder::new().nonce(1).build();
+					let tx_call = subxt::dynamic::tx(
+						"Nfts",
+						"mint",
+						vec![
+							TxValue::primitive(coll.1.into()),
+							TxValue::primitive(0u32.into()),
+							// TxValue::unnamed_composite(coll.1.into_iter().map(|a| a.into())),
+							// TxValue::unnamed_composite(vec![0u64.into(), 0u64.into(), 0u64.into(), 0u64.into()]),
+							TxValue::unnamed_variant("Id", [TxValue::from_bytes(coll.0.public())]),
+							TxValue::unnamed_variant("None", vec![]),
+						],
+					);
+					api2.tx()
+						.create_partial_offline(&tx_call, tx_params)
+						.expect("Failed to create partial offline transaction")
+						.sign(&PairSigner::new(coll.0))
+				},
+			);
 
 			// let futs = mint_txs.iter().map(|tx| tx.submit_and_watch()).collect::<FuturesUnordered<_>>();
 			let futs = mint_txs.iter().map(|tx| tx.submit()).collect::<FuturesUnordered<_>>();
@@ -603,7 +613,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 			let api2 = api.clone();
 
-			sender_lib::sign_txs(
+			sender_lib::sign_txs::<_, _, PolkadotConfig>(
 				cll.into_iter().zip(recv_accs.into_iter()),
 				move |(coll, receiver)| {
 					let signer = PairSigner::new(coll.0);
@@ -624,9 +634,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 						],
 					);
 
-					api2.tx().create_signed_offline(&tx_call, &signer, tx_params.into())
+					api2.tx()
+						.create_partial_offline(&tx_call, tx_params)
+						.expect("Failed to create partial offline transaction")
+						.sign(&signer)
 				},
-			)?
+			)
 		},
 	};
 

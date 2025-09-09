@@ -1,0 +1,34 @@
+name: Build and Publish Docker containers s0me0ne/overhaul
+
+on:
+  push:
+    branches:
+      - s0me0ne/overhaul
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stps-sender:
+    name: Build docker image
+    runs-on: ubuntu-latest
+    environment: main_n_tags
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.PR_DOCKERHUB_USERNAME }}
+          password: ${{ secrets.PR_DOCKERHUB_PASSWORD }}
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./utils/dockerfiles/Dockerfile.sender-any
+          push: true
+          tags: |
+            docker.io/paritypr/stps-sender:any-latest
+            docker.io/paritypr/stps-sender:any-${{ github.sha }}

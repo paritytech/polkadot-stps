@@ -6,19 +6,17 @@ license = "GPL-3.0-only"
 
 [workspace]
 resolver = "2"
-members = [
-	"utils/funder",
-	"utils/sender",
-	"stps"
-]
+members = ["utils/funder", "utils/sender", "stps"]
 
 default-members = ["stps"]
 
 [workspace.dependencies]
 sp-core = "31.0.0"
-sp-runtime = "32.0.0"
-sp-keyring = "32.0.0"
-subxt = { version = "0.38.1", features = ["substrate-compat"] }
+sp-runtime = "34.0.0"
+sp-keyring = "34.0.0"
+subxt = { version = "0.41" }
 frame-system = "31.0.0"
 pallet-balances = "31.0.0"
 reqwest = "0.11"
+jsonrpsee-client-transport = { version = "0.24.8", features = ["ws"] }
+jsonrpsee-core = { version = "0.24.8", features = ["async-client"] }

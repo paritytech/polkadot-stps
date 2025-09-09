@@ -4,6 +4,6 @@
 **/*.md
 /docker/
 !/target/release/polkadot-collator
-
+/utils/dockerfiles
 # dotfiles in the repo root
 /.*

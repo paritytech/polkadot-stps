@@ -14,11 +14,12 @@ use subxt::{
 	blocks::BlockRef,
 	config::polkadot::PolkadotExtrinsicParamsBuilder as Params,
 	dynamic::Value,
-	ext::sp_core::{sr25519::Pair as SrPair, Pair},
-	tx::PairSigner,
 	OnlineClient, PolkadotConfig,
 };
+use sp_core::{sr25519::Pair as SrPair, Pair};
 use tokio::sync::RwLock;
+
+use sender_lib::{PairSigner, sign_balance_transfers};
 
 const SENDER_SEED: &str = "//Sender";
 const RECEIVER_SEED: &str = "//Receiver";
@@ -201,7 +202,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 				let sender_signers = sender_accounts
 					.iter()
 					.cloned()
-					.map(PairSigner::<PolkadotConfig, SrPair>::new)
+					.map(PairSigner::new)
 					.collect::<Vec<_>>();
 
 				info!("Starting senders");
@@ -294,8 +295,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 								let tx = api
 									.tx()
-									.create_signed_offline(&tx_payload, &signer, tx_params)
-									.unwrap();
+									.create_partial_offline(&tx_payload, tx_params)
+									.expect("Failed to create partial offline transaction")
+									.sign(&signer);
 
 								match tx.submit_and_watch().await {
 									Ok(_watch) => {},
@@ -353,7 +355,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 						let mut txcount = 0;
 
 						for ex in extrinsics.iter() {
-
 							match (ex.pallet_name().expect("pallet name"), ex.variant_name().expect("variant name")) {
 								("Timestamp", "set") => {
 									let new_timestamp = Duration::from_millis(codec::Compact::<u64>::decode(&mut &ex.field_bytes()[..]).expect("timestamp decodes").0);
