@@ -129,8 +129,13 @@ struct WorkerInputs {
 	receivers: Vec<SrPair>,
 }
 
+enum Mode {
+	SeedOnce,
+	Continuous,
+}
+
 struct SenderApp {
-	should_seed: bool,
+	mode: Mode,
 	node_url: String,
 	cfg: WorkerConfig,
 	shared: SharedState,
@@ -175,7 +180,7 @@ impl SenderApp {
 			in_block: Arc::new(AtomicU64::default()),
 		};
 		Self {
-			should_seed,
+			mode: if should_seed { Mode::SeedOnce } else { Mode::Continuous },
 			node_url,
 			cfg,
 			shared,
@@ -192,13 +197,18 @@ impl SenderApp {
 			.unwrap()
 			.block_on(async move {
 				let api = connect_online_client(self.node_url.to_owned()).await;
-				let alice = <SrPair as Pair>::from_string(ALICE_SEED, None).unwrap();
 
-				if self.should_seed {
-					log::info!("Seeding sender accounts from Alice ...");
-					self.seed_senders(&api, &alice).await;
+				match self.mode {
+					Mode::SeedOnce => {
+						log::info!("Seeding mode: seed once and exit after ...");
+						let alice = <SrPair as Pair>::from_string(ALICE_SEED, None).unwrap();
+						self.seed_senders(&api, &alice).await;
+					},
+					Mode::Continuous => {
+						log::info!("Continuous mode: run senders without seeding ...");
+						self.do_run(&api).await;
+					},
 				}
-				self.do_run(&api).await;
 			});
 		Ok(())
 	}
