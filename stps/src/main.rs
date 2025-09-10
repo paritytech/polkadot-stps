@@ -358,7 +358,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 			r
 		};
 
-		//let r = if !args.para { r.with_genesis_overrides(genesis_accs.clone()) } else { r };
 		let r = r.with_genesis_overrides(json!({ "configuration": { "config": { "executor_params": [ { "MaxMemoryPages": 8192 }, { "PvfExecTimeout": [ "Backing", 2500 ] } ] } } } ));
 
 		let mut r = r.with_node(|node| node.with_name(relay_hostname.next().as_str()).invulnerable(true));
@@ -467,27 +466,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 	log::info!("Signing {} transactions...", send_accs.len());
 	let txs = match args.mode {
-		BenchMode::Stps => {
-			sender_lib::sign_balance_transfers(
-				api.clone(),
-				send_accs.into_iter().map(|a| (a, 0)).zip(recv_accs.into_iter()),
-			)
-			// let api = api.clone();
-			// sender_lib::sign_txs(send_accs.into_iter().zip(recv_accs.into_iter()), move |(sender, receiver)| {
-			// 	let signer = EthereumSigner::from(sender);
-			// 	let tx_params = DefaultExtrinsicParamsBuilder::<MythicalConfig>::new().nonce(0).build();
-			// 	let tx_call = subxt::dynamic::tx(
-			// 		"Balances",
-			// 		"transfer_keep_alive",
-			// 		vec![
-			// 			TxValue::from_bytes(&EthereumSigner::from(receiver).into_account().0),
-			// 			TxValue::u128(1_000_000_000_000_000_000u128),
-			// 		],
-			// 	);
-
-			// 	api.tx().create_signed_offline(&tx_call, &signer, tx_params.into())
-			// })?
-		},
+		BenchMode::Stps => sender_lib::sign_balance_transfers(
+			api.clone(),
+			send_accs.into_iter().map(|a| (a, 0)).zip(recv_accs.into_iter()),
+		),
 		BenchMode::NftTransfer => {
 			let api2 = api.clone();
 			let create_coll_txs = sender_lib::sign_txs::<_, _, PolkadotConfig>(
@@ -523,29 +505,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 			);
 			let futs =
 				create_coll_txs.iter().map(|tx| tx.submit()).collect::<FuturesUnordered<_>>();
-			// let futs = create_coll_txs.iter().map(|tx| tx.submit_and_watch()).collect::<FuturesUnordered<_>>();
-			// let res = futs.collect::<Vec<_>>().await.into_iter().collect::<Result<Vec<_>, _>>().expect("All the transactions submitted successfully");
 			let _res = futs
 				.collect::<Vec<_>>()
 				.await
 				.into_iter()
 				.collect::<Result<Vec<_>, _>>()
 				.expect("All the transactions submitted successfully");
-			// let waiter = res.into_iter().map(|txp| txp.wait_for_finalized_success()).collect::<FuturesUnordered<_>>();
-			// let res = waiter.collect::<Vec<_>>().await.into_iter().collect::<Result<Vec<_>, _>>().expect("All the collection creation transaction finalized");
-
-			// let mut collections = Vec::new();
-
-			// for ev in res {
-			// 	for ed in ev.iter() {
-			// 		let ed = ed?;
-			// 		if ed.pallet_name() == "Nfts" && ed.variant_name() == "Created" {
-			// 			let b = ed.field_bytes();
-			// 			let e = Collection::decode(&mut &b[..])?;
-			// 			collections.push(e);
-			// 		}
-			// 	}
-			// }
 
 			let mut proc_coll = 0;
 			let mut map: HashMap<[u8; 32], u32> = HashMap::new();
@@ -578,8 +543,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 						vec![
 							TxValue::primitive(coll.1.into()),
 							TxValue::primitive(0u32.into()),
-							// TxValue::unnamed_composite(coll.1.into_iter().map(|a| a.into())),
-							// TxValue::unnamed_composite(vec![0u64.into(), 0u64.into(), 0u64.into(), 0u64.into()]),
 							TxValue::unnamed_variant("Id", [TxValue::from_bytes(coll.0.public())]),
 							TxValue::unnamed_variant("None", vec![]),
 						],
@@ -591,7 +554,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 				},
 			);
 
-			// let futs = mint_txs.iter().map(|tx| tx.submit_and_watch()).collect::<FuturesUnordered<_>>();
 			let futs = mint_txs.iter().map(|tx| tx.submit()).collect::<FuturesUnordered<_>>();
 			let _res = futs
 				.collect::<Vec<_>>()
@@ -599,8 +561,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 				.into_iter()
 				.collect::<Result<Vec<_>, _>>()
 				.expect("All the mint transactions submitted successfully");
-			// let waiter = res.into_iter().map(|txp| txp.wait_for_finalized_success()).collect::<FuturesUnordered<_>>();
-			// let _res = waiter.collect::<Vec<_>>().await.into_iter().collect::<Result<Vec<_>, _>>().expect("All the mint transaction finalized");
 
 			let mut proc_mint = 0;
 			while proc_mint < ntrans {
@@ -624,13 +584,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 						vec![
 							TxValue::primitive(coll.1.into()),
 							TxValue::primitive(0u32.into()),
-							// TxValue::unnamed_composite(coll.1.into_iter().map(|a| a.into())),
-							// TxValue::unnamed_composite(vec![0u64.into(), 0u64.into(), 0u64.into(), 0u64.into()]),
 							TxValue::unnamed_variant(
 								"Id",
 								[TxValue::from_bytes(receiver.public())],
 							),
-							// TxValue::from_bytes(&EthereumSigner::from(receiver).into_account().0),
 						],
 					);
 
