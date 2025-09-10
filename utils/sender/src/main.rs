@@ -195,6 +195,7 @@ impl SenderApp {
 				let alice = <SrPair as Pair>::from_string(ALICE_SEED, None).unwrap();
 
 				if self.should_seed {
+					log::info!("Seeding sender accounts from Alice ...");
 					self.seed_senders(&api, &alice).await;
 				}
 				self.do_run(&api).await;
