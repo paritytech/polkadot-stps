@@ -190,252 +190,267 @@ fn spam_transactions(
 }
 
 async fn start_sending(
-    api: OnlineClient<PolkadotConfig>,
-    sender_accounts: &[SrPair],
-    sender_signers: &[PairSigner],
-    receiver_accounts: Vec<SrPair>,
-    n_sender_tasks: usize,
-    batch: usize,
-    worker_sleep: u64,
-    tps: usize,
-    sent: Arc<AtomicU64>,
-    in_block: Arc<AtomicU64>,
-    handles: &mut Vec<tokio::task::JoinHandle<()>>,
+	api: OnlineClient<PolkadotConfig>,
+	sender_accounts: &[SrPair],
+	sender_signers: &[PairSigner],
+	receiver_accounts: Vec<SrPair>,
+	n_sender_tasks: usize,
+	batch: usize,
+	worker_sleep: u64,
+	tps: usize,
+	sent: Arc<AtomicU64>,
+	in_block: Arc<AtomicU64>,
+	handles: &mut Vec<tokio::task::JoinHandle<()>>,
 ) {
-    // Subscribe to best block stream and establish initial best block reference
-    let mut best_block_stream =
-        api.blocks().subscribe_best().await.expect("Subscribe to best block failed");
-    let best_block = Arc::new(RwLock::new((
-        best_block_stream.next().await.unwrap().unwrap(),
-        Instant::now(),
-    )));
-    log::info!("Current best block: {}", best_block.read().await.0.number());
+	// Subscribe to best block stream and establish initial best block reference
+	let mut best_block_stream =
+		api.blocks().subscribe_best().await.expect("Subscribe to best block failed");
+	let best_block =
+		Arc::new(RwLock::new((best_block_stream.next().await.unwrap().unwrap(), Instant::now())));
+	log::info!("Current best block: {}", best_block.read().await.0.number());
 
-    // Local timing state for TPS calculation
-    let mut timestamp = Duration::from_micros(0);
-    let mut block_time = Duration::from_micros(0);
+	// Local timing state for TPS calculation
+	let mut timestamp = Duration::from_micros(0);
+	let mut block_time = Duration::from_micros(0);
 
-    sent.store(0, Ordering::SeqCst);
-    in_block.store(0, Ordering::SeqCst);
+	sent.store(0, Ordering::SeqCst);
+	in_block.store(0, Ordering::SeqCst);
 
-    // Spawn 1 task per sender.
-    for i in 0..n_sender_tasks {
-        // Helper closure to fetch the current best block hash without exposing its concrete type.
-        let best_block_c = best_block.clone();
-        let get_best_hash = move || {
-            let best_block_c = best_block_c.clone();
-            Box::pin(async move { best_block_c.read().await.0.hash() })
-                as std::pin::Pin<Box<dyn std::future::Future<Output = subxt::utils::H256> + Send>>
-        };
+	// Spawn 1 task per sender.
+	for i in 0..n_sender_tasks {
+		// Helper closure to fetch the current best block hash without exposing its concrete type.
+		let best_block_c = best_block.clone();
+		let get_best_hash = move || {
+			let best_block_c = best_block_c.clone();
+			Box::pin(async move { best_block_c.read().await.0.hash() })
+				as std::pin::Pin<Box<dyn std::future::Future<Output = subxt::utils::H256> + Send>>
+		};
 
-        let handle = spawn_sender_task(
-            i,
-            n_sender_tasks,
-            sender_accounts[i].clone(),
-            sender_signers[i].clone(),
-            receiver_accounts.clone(),
-            batch,
-            worker_sleep,
-            api.clone(),
-            sent.clone(),
-            in_block.clone(),
-            get_best_hash,
-        );
-        handles.push(handle);
-    }
-    log::info!("All senders started");
+		let handle = spawn_sender_task(
+			i,
+			n_sender_tasks,
+			sender_accounts[i].clone(),
+			sender_signers[i].clone(),
+			receiver_accounts.clone(),
+			batch,
+			worker_sleep,
+			api.clone(),
+			sent.clone(),
+			in_block.clone(),
+			get_best_hash,
+		);
+		handles.push(handle);
+	}
+	log::info!("All senders started");
 
-    let mut tps_window = VecDeque::new();
-    let loop_start = Instant::now();
-    loop {
-        if let Ok(Some(new_best_block)) = best_block_stream.try_next().await {
-            *best_block.write().await = (new_best_block, Instant::now());
-        } else {
-            log::error!("Best block subscription lost, trying to reconnect ... ");
-            loop {
-                match api.blocks().subscribe_best().await {
-                    Ok(fresh_best_block_stream) => {
-                        best_block_stream = fresh_best_block_stream;
-                        log::info!("Reconnected.");
-                        break;
-                    }
-                    Err(e) => {
-                        log::error!("Reconnect failed: {:?} ", e);
-                        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                    }
-                }
-            }
-        }
-        let best_block_r = &best_block.read().await.0;
-        let Ok(extrinsics) = best_block_r.extrinsics().await else {
-            // Most likely, need to reconnect to RPC.
-            continue;
-        };
-        let mut txcount = 0;
-        for ex in extrinsics.iter() {
-            match (
-                ex.pallet_name().expect("pallet name"),
-                ex.variant_name().expect("variant name"),
-            ) {
-                ("Timestamp", "set") => {
-                    let new_timestamp = Duration::from_millis(
-                        codec::Compact::<u64>::decode(&mut &ex.field_bytes()[..])
-                            .expect("timestamp decodes")
-                            .0,
-                    );
-                    block_time = new_timestamp - timestamp;
-                    timestamp = new_timestamp;
-                }
-                ("Nfts", "transfer") => {
-                    txcount += 1;
-                }
-                _ => (),
-            }
-        }
-        for ev in best_block_r.events().await.expect("Events are available").iter() {
-            let ev = ev.expect("Event is available");
-            match (ev.pallet_name(), ev.variant_name()) {
-                ("Balances", "Transfer") => {
-                    txcount += 1;
-                }
-                _ => (),
-            }
-        }
-        in_block.fetch_add(txcount, Ordering::SeqCst);
-        let btime = if block_time.is_zero() { 6000 } else { block_time.as_millis() };
-        let tps_ = txcount * 1000 / btime as u64;
-        tps_window.push_back(tps_ as usize);
-        // A window of size 12
-        if tps_window.len() > 12 {
-            tps_window.pop_front();
-            let avg_tps = tps_window.iter().sum::<usize>();
-            if avg_tps < tps / 4 {
-                log::warn!("TPS dropped below 25% of target ...");
-                break;
-            }
-        }
-        let avg_tps = tps_window.iter().sum::<usize>() / tps_window.len();
-        log::info!(
-            "TPS: {} \t | Avg: {} \t | Sent/Exec: {}/{} | Best: {} | txs = {} | block time = {:?}",
-            tps,
-            avg_tps,
-            sent.load(Ordering::SeqCst),
-            in_block.load(Ordering::SeqCst),
-            best_block_r.number(),
-            txcount,
-            block_time
-        );
-        if loop_start.elapsed() > Duration::from_secs(60 * 5) {
-            break;
-        }
-    }
+	let mut tps_window = VecDeque::new();
+	let loop_start = Instant::now();
+	loop {
+		// Update best block subscription, reconnecting if necessary
+		if let Ok(Some(new_best_block)) = best_block_stream.try_next().await {
+			*best_block.write().await = (new_best_block, Instant::now());
+		} else {
+			log::error!("Best block subscription lost, trying to reconnect ... ");
+			loop {
+				match api.blocks().subscribe_best().await {
+					Ok(fresh_best_block_stream) => {
+						best_block_stream = fresh_best_block_stream;
+						log::info!("Reconnected.");
+						break;
+					},
+					Err(e) => {
+						log::error!("Reconnect failed: {:?} ", e);
+						tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+					},
+				}
+			}
+		}
+		let best_block_r = &best_block.read().await.0;
+		// Process the current best block, update metrics, and decide whether to stop early.
+		if process_block_metrics_and_log(
+			best_block_r,
+			&mut timestamp,
+			&mut block_time,
+			&mut tps_window,
+			&sent,
+			&in_block,
+			tps,
+		)
+		.await
+		{
+			break;
+		}
+		if loop_start.elapsed() > Duration::from_secs(60 * 5) {
+			break;
+		}
+	}
 }
-
 
 fn spawn_sender_task<F>(
-    i: usize,
-    n_sender_tasks: usize,
-    sender: SrPair,
-    signer: PairSigner,
-    receiver_accounts: Vec<SrPair>,
-    batch: usize,
-    worker_sleep: u64,
-    api: OnlineClient<PolkadotConfig>,
-    sent: Arc<AtomicU64>,
-    in_block: Arc<AtomicU64>,
-    mut get_best_hash: F,
+	i: usize,
+	n_sender_tasks: usize,
+	sender: SrPair,
+	signer: PairSigner,
+	receiver_accounts: Vec<SrPair>,
+	batch: usize,
+	worker_sleep: u64,
+	api: OnlineClient<PolkadotConfig>,
+	sent: Arc<AtomicU64>,
+	in_block: Arc<AtomicU64>,
+	get_best_hash: F,
 ) -> tokio::task::JoinHandle<()>
 where
-    F: Fn() -> std::pin::Pin<
-            Box<dyn std::future::Future<Output = subxt::utils::H256> + Send>,
-        > + Send
-        + Sync
-        + 'static,
+	F: Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = subxt::utils::H256> + Send>>
+		+ Send
+		+ Sync
+		+ 'static,
 {
-    let nrecv = if batch > 1 { batch } else { 1 };
-    tokio::spawn(async move {
-        // Slowly ramp up 10ms slots.
-        tokio::time::sleep(std::time::Duration::from_millis(((n_sender_tasks - i) * 10) as u64))
-            .await;
-        let receivers = &receiver_accounts[i..i + nrecv];
-        let mut sleep_time_ms = 0u64;
-        let block_ref: BlockRef<subxt::utils::H256> =
-            BlockRef::from_hash(get_best_hash().await);
-        let mut nonce = get_account_nonce(&api, block_ref.clone(), &sender).await;
-        loop {
-            // Throttle if the backlog of un included txs is too high
-            if sent.load(Ordering::SeqCst) > in_block.load(Ordering::SeqCst) + 100_000 {
-                // Wait 10ms and check again.
-                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-                // Subtract above sleep from TPS delay.
-                sleep_time_ms = sleep_time_ms.saturating_sub(10);
-                continue;
-            }
-            // Target a rate per worker, so we wait.
-            tokio::time::sleep(std::time::Duration::from_millis(sleep_time_ms)).await;
-            let now = Instant::now();
-            log::debug!("Sender {} using nonce {}", i, nonce);
-            let tx_payload = if batch > 1 {
-                let calls = (0..batch)
-                    .map(|i| {
-                        subxt::dynamic::tx(
-                            "Balances",
-                            "transfer_keep_alive",
-                            vec![
-                                Value::unnamed_variant(
-                                    "Id",
-                                    [Value::from_bytes(receivers[i].public())],
-                                ),
-                                Value::u128(1000000000000),
-                            ],
-                        )
-                        .into_value()
-                    })
-                    .collect::<Vec<_>>();
-                subxt::dynamic::tx(
-                    "Utility",
-                    "batch",
-                    vec![Value::named_composite(vec![("calls", calls.into())])],
-                )
-            } else {
-                subxt::dynamic::tx(
-                    "Balances",
-                    "transfer_keep_alive",
-                    vec![
-                        Value::unnamed_variant(
-                            "Id",
-                            [Value::from_bytes(receivers[0].public())],
-                        ),
-                        Value::u128(1000000000000),
-                    ],
-                )
-            };
-            let tx_params = Params::new().nonce(nonce as u64).build();
-            let tx: SubmittableTransaction<_, OnlineClient<_>> = api
-                .tx()
-                .create_partial_offline(&tx_payload, tx_params)
-                .expect("Failed to create partial offline transaction")
-                .sign(&signer);
-            match tx.submit_and_watch().await {
-                Ok(_watch) => {}
-                Err(err) => {
-                    log::error!("{:?}", err);
-                    let block_ref: BlockRef<subxt::utils::H256> =
-                        BlockRef::from_hash(get_best_hash().await);
-                    nonce = get_account_nonce(&api, block_ref, &sender).await;
-                    // at most 1 second
-                    sleep_time_ms = worker_sleep.saturating_sub(now.elapsed().as_millis() as u64);
-                    continue;
-                }
-            };
-            sent.fetch_add(batch as u64, Ordering::SeqCst);
-            // Determine how much left to sleep, we need to retry in 1000ms (backoff)
-            sleep_time_ms = worker_sleep.saturating_sub(now.elapsed().as_millis() as u64);
-            nonce += 1;
-        }
-    })
+	let nrecv = if batch > 1 { batch } else { 1 };
+	tokio::spawn(async move {
+		// Slowly ramp up 10ms slots.
+		tokio::time::sleep(std::time::Duration::from_millis(((n_sender_tasks - i) * 10) as u64))
+			.await;
+		let receivers = &receiver_accounts[i..i + nrecv];
+		let mut sleep_time_ms = 0u64;
+		let block_ref: BlockRef<subxt::utils::H256> = BlockRef::from_hash(get_best_hash().await);
+		let mut nonce = get_account_nonce(&api, block_ref.clone(), &sender).await;
+		loop {
+			// Throttle if the backlog of un included txs is too high
+			if sent.load(Ordering::SeqCst) > in_block.load(Ordering::SeqCst) + 100_000 {
+				// Wait 10ms and check again.
+				tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+				// Subtract above sleep from TPS delay.
+				sleep_time_ms = sleep_time_ms.saturating_sub(10);
+				continue;
+			}
+			// Target a rate per worker, so we wait.
+			tokio::time::sleep(std::time::Duration::from_millis(sleep_time_ms)).await;
+			let now = Instant::now();
+			log::debug!("Sender {} using nonce {}", i, nonce);
+			let tx_payload = if batch > 1 {
+				let calls = (0..batch)
+					.map(|i| {
+						subxt::dynamic::tx(
+							"Balances",
+							"transfer_keep_alive",
+							vec![
+								Value::unnamed_variant(
+									"Id",
+									[Value::from_bytes(receivers[i].public())],
+								),
+								Value::u128(1000000000000),
+							],
+						)
+						.into_value()
+					})
+					.collect::<Vec<_>>();
+				subxt::dynamic::tx(
+					"Utility",
+					"batch",
+					vec![Value::named_composite(vec![("calls", calls.into())])],
+				)
+			} else {
+				subxt::dynamic::tx(
+					"Balances",
+					"transfer_keep_alive",
+					vec![
+						Value::unnamed_variant("Id", [Value::from_bytes(receivers[0].public())]),
+						Value::u128(1000000000000),
+					],
+				)
+			};
+			let tx_params = Params::new().nonce(nonce as u64).build();
+			let tx: SubmittableTransaction<_, OnlineClient<_>> = api
+				.tx()
+				.create_partial_offline(&tx_payload, tx_params)
+				.expect("Failed to create partial offline transaction")
+				.sign(&signer);
+			match tx.submit_and_watch().await {
+				Ok(_watch) => {},
+				Err(err) => {
+					log::error!("{:?}", err);
+					let block_ref: BlockRef<subxt::utils::H256> =
+						BlockRef::from_hash(get_best_hash().await);
+					nonce = get_account_nonce(&api, block_ref, &sender).await;
+					// at most 1 second
+					sleep_time_ms = worker_sleep.saturating_sub(now.elapsed().as_millis() as u64);
+					continue;
+				},
+			};
+			sent.fetch_add(batch as u64, Ordering::SeqCst);
+			// Determine how much left to sleep, we need to retry in 1000ms (backoff)
+			sleep_time_ms = worker_sleep.saturating_sub(now.elapsed().as_millis() as u64);
+			nonce += 1;
+		}
+	})
 }
 
+async fn process_block_metrics_and_log(
+	best_block_r: &subxt::blocks::Block<PolkadotConfig, OnlineClient<PolkadotConfig>>,
+	timestamp: &mut Duration,
+	block_time: &mut Duration,
+	tps_window: &mut VecDeque<usize>,
+	sent: &Arc<AtomicU64>,
+	in_block: &Arc<AtomicU64>,
+	tps: usize,
+) -> bool {
+	let Ok(extrinsics) = best_block_r.extrinsics().await else {
+		// Most likely, need to reconnect to RPC.
+		return false;
+	};
+	let mut txcount: u64 = 0;
+	for ex in extrinsics.iter() {
+		match (ex.pallet_name().expect("pallet name"), ex.variant_name().expect("variant name")) {
+			("Timestamp", "set") => {
+				let new_timestamp = Duration::from_millis(
+					codec::Compact::<u64>::decode(&mut &ex.field_bytes()[..])
+						.expect("timestamp decodes")
+						.0,
+				);
+				*block_time = new_timestamp.saturating_sub(*timestamp);
+				*timestamp = new_timestamp;
+			},
+			("Nfts", "transfer") => {
+				txcount += 1;
+			},
+			_ => (),
+		}
+	}
+	for ev in best_block_r.events().await.expect("Events are available").iter() {
+		let ev = ev.expect("Event is available");
+		match (ev.pallet_name(), ev.variant_name()) {
+			("Balances", "Transfer") => {
+				txcount += 1;
+			},
+			_ => (),
+		}
+	}
+	in_block.fetch_add(txcount, Ordering::SeqCst);
+	let btime_ms = if block_time.is_zero() { 6000 } else { block_time.as_millis() } as u64;
+	let tps_ = txcount.saturating_mul(1000) / btime_ms.max(1);
+	tps_window.push_back(tps_ as usize);
+	// Keep window size to 12
+	if tps_window.len() > 12 {
+		tps_window.pop_front();
+		let avg_tps = tps_window.iter().sum::<usize>();
+		if avg_tps < tps / 4 {
+			log::warn!("TPS dropped below 25% of target ...");
+			return true;
+		}
+	}
+	let avg_tps = tps_window.iter().sum::<usize>() / tps_window.len();
+	log::info!(
+		"TPS: {} \t | Avg: {} \t | Sent/Exec: {}/{} | Best: {} | txs = {} | block time = {:?}",
+		tps,
+		avg_tps,
+		sent.load(Ordering::SeqCst),
+		in_block.load(Ordering::SeqCst),
+		best_block_r.number(),
+		txcount,
+		*block_time
+	);
+	false
+}
 
 async fn do_spam_transactions(
 	sender_accounts: &[SrPair],
@@ -467,7 +482,8 @@ async fn do_spam_transactions(
 			sent.clone(),
 			in_block.clone(),
 			&mut handles,
-		).await;
+		)
+		.await;
 
 		// Restarting
 		for handle in handles.iter() {
