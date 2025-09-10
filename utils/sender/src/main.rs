@@ -130,7 +130,8 @@ struct WorkerInputs {
 }
 
 struct SenderApp {
-	api: OnlineClient<PolkadotConfig>,
+	should_seed: bool,
+	node_url: String,
 	cfg: WorkerConfig,
 	shared: SharedState,
 	sender_accounts: Arc<Vec<SrPair>>,
@@ -138,14 +139,35 @@ struct SenderApp {
 	sender_signers: Arc<Vec<PairSigner>>,
 }
 
+impl From<Args> for SenderApp {
+	fn from(args: Args) -> Self {
+		// Assume number of senders equal to TPS if not specified.
+		let n_sender_tasks = if args.batch > 1 { args.tps / args.batch } else { args.tps };
+		let n_tx_sender = args.total_senders.unwrap_or(args.tps);
+		let worker_sleep =
+			(1_000f64 * ((n_sender_tasks as f64 * args.batch as f64) / args.tps as f64)) as u64;
+
+		log::info!("worker_sleep = {}", worker_sleep);
+		log::info!("sender tasks  = {}", n_sender_tasks);
+		log::info!("sender accounts  = {}", n_tx_sender);
+
+		let sender_accounts = funder_lib::derive_accounts(n_tx_sender, SENDER_SEED.to_owned());
+		let receiver_accounts = funder_lib::derive_accounts(n_tx_sender, RECEIVER_SEED.to_owned());
+
+		// Build app config
+		let cfg = WorkerConfig { n_sender_tasks, batch: args.batch, worker_sleep, tps: args.tps };
+
+		Self::new(args.seed, args.node_url, sender_accounts, receiver_accounts, cfg)
+	}
+}
 impl SenderApp {
-	async fn new(
-		node_url: &str,
+	fn new(
+		should_seed: bool,
+		node_url: String,
 		sender_accounts: Vec<SrPair>,
 		receiver_accounts: Vec<SrPair>,
 		cfg: WorkerConfig,
 	) -> Self {
-		let api = connect_online_client(node_url.to_owned()).await;
 		let sender_signers =
 			sender_accounts.iter().cloned().map(PairSigner::new).collect::<Vec<_>>();
 		let shared = SharedState {
@@ -153,7 +175,8 @@ impl SenderApp {
 			in_block: Arc::new(AtomicU64::default()),
 		};
 		Self {
-			api,
+			should_seed,
+			node_url,
 			cfg,
 			shared,
 			sender_accounts: Arc::new(sender_accounts),
@@ -162,10 +185,27 @@ impl SenderApp {
 		}
 	}
 
-	async fn run(&self) {
+	fn run(&self) -> Result<(), Box<dyn Error>> {
+		tokio::runtime::Builder::new_multi_thread()
+			.enable_all()
+			.build()
+			.unwrap()
+			.block_on(async move {
+				let api = connect_online_client(self.node_url.to_owned()).await;
+				let alice = <SrPair as Pair>::from_string(ALICE_SEED, None).unwrap();
+
+				if self.should_seed {
+					self.seed_senders(&api, &alice).await;
+				}
+				self.do_run(&api).await;
+			});
+		Ok(())
+	}
+
+	async fn do_run(&self, api: &OnlineClient<PolkadotConfig>) {
 		loop {
 			let mut handles = Vec::new();
-			self.run_workers(&mut handles).await;
+			self.run_workers(api, &mut handles).await;
 			for handle in handles.iter() {
 				handle.abort();
 			}
@@ -174,19 +214,14 @@ impl SenderApp {
 	}
 
 	/// Transfer funds from a seeding account to all sender accounts owned by this app.
-	async fn seed_senders(&self, seeding_account: &SrPair) {
+	async fn seed_senders(&self, api: &OnlineClient<PolkadotConfig>, seeding_account: &SrPair) {
 		log::info!("Seeding accounts");
-		let mut best_block_stream = self
-			.api
-			.blocks()
-			.subscribe_best()
-			.await
-			.expect("Subscribe to best block failed");
+		let mut best_block_stream =
+			api.blocks().subscribe_best().await.expect("Subscribe to best block failed");
 		let best_block = best_block_stream.next().await.unwrap().unwrap();
 		let block_ref: BlockRef<subxt::utils::H256> = BlockRef::from_hash(best_block.hash());
 
-		let mut nonce =
-			fetch_account_nonce_at_block(&self.api, block_ref.clone(), seeding_account).await;
+		let mut nonce = fetch_account_nonce_at_block(api, block_ref.clone(), seeding_account).await;
 
 		for sender in self.sender_accounts.iter() {
 			let payload = subxt::dynamic::tx(
@@ -200,8 +235,7 @@ impl SenderApp {
 
 			let tx_params = Params::new().nonce(nonce).build();
 			let signer = PairSigner::new(seeding_account.clone());
-			let tx: SubmittableTransaction<_, OnlineClient<_>> = self
-				.api
+			let tx: SubmittableTransaction<_, OnlineClient<_>> = api
 				.tx()
 				.create_partial(&payload, signer.account_id(), tx_params)
 				.await
@@ -222,13 +256,13 @@ impl SenderApp {
 		}
 	}
 
-	async fn run_workers(&self, handles: &mut Vec<tokio::task::JoinHandle<()>>) {
-		let mut best_block_stream = self
-			.api
-			.blocks()
-			.subscribe_best()
-			.await
-			.expect("Subscribe to best block failed");
+	async fn run_workers(
+		&self,
+		api: &OnlineClient<PolkadotConfig>,
+		handles: &mut Vec<tokio::task::JoinHandle<()>>,
+	) {
+		let mut best_block_stream =
+			api.blocks().subscribe_best().await.expect("Subscribe to best block failed");
 		let best_block: BestBlockRef = Arc::new(RwLock::new((
 			best_block_stream.next().await.unwrap().unwrap(),
 			Instant::now(),
@@ -241,7 +275,7 @@ impl SenderApp {
 		self.shared.in_block.store(0, Ordering::SeqCst);
 
 		for i in 0..self.cfg.n_sender_tasks {
-			let handle = self.spawn_worker(i, best_block.clone());
+			let handle = self.spawn_worker(api, i, best_block.clone());
 			handles.push(handle);
 		}
 		log::info!("All senders started");
@@ -254,7 +288,7 @@ impl SenderApp {
 			} else {
 				log::error!("Best block subscription lost, trying to reconnect ... ");
 				loop {
-					match self.api.blocks().subscribe_best().await {
+					match api.blocks().subscribe_best().await {
 						Ok(fresh_best_block_stream) => {
 							best_block_stream = fresh_best_block_stream;
 							log::info!("Reconnected.");
@@ -359,9 +393,14 @@ impl SenderApp {
 		false
 	}
 
-	fn spawn_worker(&self, i: usize, best_block: BestBlockRef) -> tokio::task::JoinHandle<()> {
+	fn spawn_worker(
+		&self,
+		api: &OnlineClient<PolkadotConfig>,
+		i: usize,
+		best_block: BestBlockRef,
+	) -> tokio::task::JoinHandle<()> {
 		let cfg = self.cfg;
-		let api = self.api.clone();
+		let api = api.clone();
 		let shared = self.shared.clone();
 		let sender = self.sender_accounts[i].clone();
 		let signer = self.sender_signers[i].clone();
@@ -503,42 +542,15 @@ async fn connect_online_client(node_url: String) -> OnlineClient<PolkadotConfig>
 	OnlineClient::from_backend(backend).await.unwrap()
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn setup_logging() {
 	env_logger::init_from_env(
 		env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info"),
 	);
+}
 
+fn main() -> Result<(), Box<dyn Error>> {
+	setup_logging();
 	let args = Args::parse();
-
-	// Assume number of senders equal to TPS if not specified.
-	let n_sender_tasks = if args.batch > 1 { args.tps / args.batch } else { args.tps };
-	let n_tx_sender = args.total_senders.unwrap_or(args.tps);
-	let worker_sleep =
-		(1_000f64 * ((n_sender_tasks as f64 * args.batch as f64) / args.tps as f64)) as u64;
-
-	log::info!("worker_sleep = {}", worker_sleep);
-	log::info!("sender tasks  = {}", n_sender_tasks);
-	log::info!("sender accounts  = {}", n_tx_sender);
-
-	let sender_accounts = funder_lib::derive_accounts(n_tx_sender, SENDER_SEED.to_owned());
-	let receiver_accounts = funder_lib::derive_accounts(n_tx_sender, RECEIVER_SEED.to_owned());
-	let alice = <SrPair as Pair>::from_string(ALICE_SEED, None).unwrap();
-
-	// Build app config
-	let cfg = WorkerConfig { n_sender_tasks, batch: args.batch, worker_sleep, tps: args.tps };
-
-	// Initialize runtime and run the app
-	tokio::runtime::Builder::new_multi_thread()
-		.enable_all()
-		.build()
-		.unwrap()
-		.block_on(async move {
-			let app = SenderApp::new(&args.node_url, sender_accounts, receiver_accounts, cfg).await;
-			if args.seed {
-				app.seed_senders(&alice).await;
-			}
-			app.run().await;
-		});
-
-	Ok(())
+	let app = SenderApp::from(args);
+	app.run()
 }
