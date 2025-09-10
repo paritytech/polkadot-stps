@@ -220,92 +220,28 @@ async fn start_sending(
 
     // Spawn 1 task per sender.
     for i in 0..n_sender_tasks {
-        let in_block_c = in_block.clone();
-        let sent_c = sent.clone();
-        let sender = sender_accounts[i].clone();
-        let signer: PairSigner = sender_signers[i].clone();
+        // Helper closure to fetch the current best block hash without exposing its concrete type.
         let best_block_c = best_block.clone();
-        let api_c = api.clone();
-        let receiver_accounts_c = receiver_accounts.clone();
-        let nrecv = if batch > 1 { batch } else { 1 };
-        let task = async move {
-            // Slowly ramp up 10ms slots.
-            tokio::time::sleep(std::time::Duration::from_millis(((n_sender_tasks - i) * 10) as u64)).await;
-            let receivers = &receiver_accounts_c[i..i + nrecv];
-            let mut sleep_time_ms = 0u64;
-            let block_ref: BlockRef<subxt::utils::H256> =
-                BlockRef::from_hash(best_block_c.read().await.0.hash());
-            let mut nonce = get_account_nonce(&api_c, block_ref.clone(), &sender).await;
-            loop {
-                // Throttle if the backlog of un included txs is too high
-                if sent_c.load(Ordering::SeqCst) > in_block_c.load(Ordering::SeqCst) + 100_000 {
-                    // Wait 10ms and check again.
-                    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-                    // Subtract above sleep from TPS delay.
-                    sleep_time_ms = sleep_time_ms.saturating_sub(10);
-                    continue;
-                }
-                // Target a rate per worker, so we wait.
-                tokio::time::sleep(std::time::Duration::from_millis(sleep_time_ms)).await;
-                let now = Instant::now();
-                log::debug!("Sender {} using nonce {}", i, nonce);
-                let tx_payload = if batch > 1 {
-                    let calls = (0..batch)
-                        .map(|i| {
-                            subxt::dynamic::tx(
-                                "Balances",
-                                "transfer_keep_alive",
-                                vec![
-                                    Value::unnamed_variant(
-                                        "Id",
-                                        [Value::from_bytes(receivers[i].public())],
-                                    ),
-                                    Value::u128(1000000000000),
-                                ],
-                            )
-                            .into_value()
-                        })
-                        .collect::<Vec<_>>();
-                    subxt::dynamic::tx(
-                        "Utility",
-                        "batch",
-                        vec![Value::named_composite(vec![("calls", calls.into())])],
-                    )
-                } else {
-                    subxt::dynamic::tx(
-                        "Balances",
-                        "transfer_keep_alive",
-                        vec![
-                            Value::unnamed_variant("Id", [Value::from_bytes(receivers[0].public())]),
-                            Value::u128(1000000000000),
-                        ],
-                    )
-                };
-                let tx_params = Params::new().nonce(nonce as u64).build();
-                let tx: SubmittableTransaction<_, OnlineClient<_>> = api_c
-                    .tx()
-                    .create_partial_offline(&tx_payload, tx_params)
-                    .expect("Failed to create partial offline transaction")
-                    .sign(&signer);
-                match tx.submit_and_watch().await {
-                    Ok(_watch) => {}
-                    Err(err) => {
-                        log::error!("{:?}", err);
-                        let block_ref: BlockRef<subxt::utils::H256> =
-                            BlockRef::from_hash(best_block_c.read().await.0.hash());
-                        nonce = get_account_nonce(&api_c, block_ref, &sender).await;
-                        // at most 1 second
-                        sleep_time_ms = worker_sleep.saturating_sub(now.elapsed().as_millis() as u64);
-                        continue;
-                    }
-                };
-                sent_c.fetch_add(batch as u64, Ordering::SeqCst);
-                // Determine how much left to sleep, we need to retry in 1000ms (backoff)
-                sleep_time_ms = worker_sleep.saturating_sub(now.elapsed().as_millis() as u64);
-                nonce += 1;
-            }
+        let get_best_hash = move || {
+            let best_block_c = best_block_c.clone();
+            Box::pin(async move { best_block_c.read().await.0.hash() })
+                as std::pin::Pin<Box<dyn std::future::Future<Output = subxt::utils::H256> + Send>>
         };
-        handles.push(tokio::spawn(task));
+
+        let handle = spawn_sender_task(
+            i,
+            n_sender_tasks,
+            sender_accounts[i].clone(),
+            sender_signers[i].clone(),
+            receiver_accounts.clone(),
+            batch,
+            worker_sleep,
+            api.clone(),
+            sent.clone(),
+            in_block.clone(),
+            get_best_hash,
+        );
+        handles.push(handle);
     }
     log::info!("All senders started");
 
@@ -393,6 +329,111 @@ async fn start_sending(
             break;
         }
     }
+}
+
+
+fn spawn_sender_task<F>(
+    i: usize,
+    n_sender_tasks: usize,
+    sender: SrPair,
+    signer: PairSigner,
+    receiver_accounts: Vec<SrPair>,
+    batch: usize,
+    worker_sleep: u64,
+    api: OnlineClient<PolkadotConfig>,
+    sent: Arc<AtomicU64>,
+    in_block: Arc<AtomicU64>,
+    mut get_best_hash: F,
+) -> tokio::task::JoinHandle<()>
+where
+    F: Fn() -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = subxt::utils::H256> + Send>,
+        > + Send
+        + Sync
+        + 'static,
+{
+    let nrecv = if batch > 1 { batch } else { 1 };
+    tokio::spawn(async move {
+        // Slowly ramp up 10ms slots.
+        tokio::time::sleep(std::time::Duration::from_millis(((n_sender_tasks - i) * 10) as u64))
+            .await;
+        let receivers = &receiver_accounts[i..i + nrecv];
+        let mut sleep_time_ms = 0u64;
+        let block_ref: BlockRef<subxt::utils::H256> =
+            BlockRef::from_hash(get_best_hash().await);
+        let mut nonce = get_account_nonce(&api, block_ref.clone(), &sender).await;
+        loop {
+            // Throttle if the backlog of un included txs is too high
+            if sent.load(Ordering::SeqCst) > in_block.load(Ordering::SeqCst) + 100_000 {
+                // Wait 10ms and check again.
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                // Subtract above sleep from TPS delay.
+                sleep_time_ms = sleep_time_ms.saturating_sub(10);
+                continue;
+            }
+            // Target a rate per worker, so we wait.
+            tokio::time::sleep(std::time::Duration::from_millis(sleep_time_ms)).await;
+            let now = Instant::now();
+            log::debug!("Sender {} using nonce {}", i, nonce);
+            let tx_payload = if batch > 1 {
+                let calls = (0..batch)
+                    .map(|i| {
+                        subxt::dynamic::tx(
+                            "Balances",
+                            "transfer_keep_alive",
+                            vec![
+                                Value::unnamed_variant(
+                                    "Id",
+                                    [Value::from_bytes(receivers[i].public())],
+                                ),
+                                Value::u128(1000000000000),
+                            ],
+                        )
+                        .into_value()
+                    })
+                    .collect::<Vec<_>>();
+                subxt::dynamic::tx(
+                    "Utility",
+                    "batch",
+                    vec![Value::named_composite(vec![("calls", calls.into())])],
+                )
+            } else {
+                subxt::dynamic::tx(
+                    "Balances",
+                    "transfer_keep_alive",
+                    vec![
+                        Value::unnamed_variant(
+                            "Id",
+                            [Value::from_bytes(receivers[0].public())],
+                        ),
+                        Value::u128(1000000000000),
+                    ],
+                )
+            };
+            let tx_params = Params::new().nonce(nonce as u64).build();
+            let tx: SubmittableTransaction<_, OnlineClient<_>> = api
+                .tx()
+                .create_partial_offline(&tx_payload, tx_params)
+                .expect("Failed to create partial offline transaction")
+                .sign(&signer);
+            match tx.submit_and_watch().await {
+                Ok(_watch) => {}
+                Err(err) => {
+                    log::error!("{:?}", err);
+                    let block_ref: BlockRef<subxt::utils::H256> =
+                        BlockRef::from_hash(get_best_hash().await);
+                    nonce = get_account_nonce(&api, block_ref, &sender).await;
+                    // at most 1 second
+                    sleep_time_ms = worker_sleep.saturating_sub(now.elapsed().as_millis() as u64);
+                    continue;
+                }
+            };
+            sent.fetch_add(batch as u64, Ordering::SeqCst);
+            // Determine how much left to sleep, we need to retry in 1000ms (backoff)
+            sleep_time_ms = worker_sleep.saturating_sub(now.elapsed().as_millis() as u64);
+            nonce += 1;
+        }
+    })
 }
 
 
