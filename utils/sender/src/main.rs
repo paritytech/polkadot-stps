@@ -246,12 +246,8 @@ impl SenderApp {
 
 			let tx_params = Params::new().nonce(nonce).build();
 			let signer = PairSigner::new(seeding_account.clone());
-			let tx: SubmittableTransaction<_, OnlineClient<_>> = api
-				.tx()
-				.create_partial(&payload, signer.account_id(), tx_params)
-				.await
-				.unwrap()
-				.sign(&signer);
+			let tx: SubmittableTransaction<_, OnlineClient<_>> =
+				api.tx().create_signed(&payload, &signer, tx_params).await.unwrap();
 
 			let _ = match tx.submit_and_watch().await {
 				Ok(watch) => {
