@@ -1,6 +1,6 @@
 use clap::Parser;
 use codec::Decode;
-use futures::TryStreamExt;
+use futures::{stream::FuturesUnordered, StreamExt};
 use jsonrpsee_client_transport::ws::WsTransportClientBuilder;
 use jsonrpsee_core::client::{async_client::PingConfig, Client};
 use sender_lib::PairSigner;
@@ -126,7 +126,7 @@ struct SharedState {
 struct WorkerInputs {
 	sender: SrPair,
 	signer: PairSigner,
-	receivers: Vec<SrPair>,
+	receiver_id_values: Vec<Value>,
 }
 
 enum Mode {
@@ -232,8 +232,12 @@ impl SenderApp {
 		let best_block = best_block_stream.next().await.unwrap().unwrap();
 		let block_ref: BlockRef<subxt::utils::H256> = BlockRef::from_hash(best_block.hash());
 
-		let mut nonce = fetch_account_nonce_at_block(api, block_ref.clone(), seeding_account).await;
+		let mut next_nonce =
+			fetch_account_nonce_at_block(api, block_ref.clone(), seeding_account).await;
+		let signer = PairSigner::new(seeding_account.clone());
 
+		// Build all signed txs with sequential nonces
+		let mut signed = Vec::with_capacity(self.sender_accounts.len());
 		for sender in self.sender_accounts.iter() {
 			let payload = subxt::dynamic::tx(
 				PALLET_NAME_BALANCES,
@@ -243,24 +247,24 @@ impl SenderApp {
 					Value::u128(SEED_TRANSFER_AMOUNT),
 				],
 			);
-
-			let tx_params = Params::new().nonce(nonce).build();
-			let signer = PairSigner::new(seeding_account.clone());
+			let tx_params = Params::new().nonce(next_nonce).build();
 			let tx: SubmittableTransaction<_, OnlineClient<_>> =
 				api.tx().create_signed(&payload, &signer, tx_params).await.unwrap();
-
-			let _ = match tx.submit_and_watch().await {
-				Ok(watch) => {
-					log::info!("Seeded account");
-					nonce += 1;
-					watch
-				},
-				Err(err) => {
-					log::warn!("{:?}", err);
-					continue;
-				},
-			};
+			signed.push(tx);
+			next_nonce += 1;
 		}
+
+		// Submit concurrently without watching; inclusion is not required here
+		let mut futs: FuturesUnordered<_> = FuturesUnordered::new();
+		for tx in signed.into_iter() {
+			futs.push(async move { tx.submit().await });
+		}
+		while let Some(res) = futs.next().await {
+			if let Err(err) = res {
+				log::warn!("Seeding submit error: {:?}", err);
+			}
+		}
+		log::info!("Seeding submitted for {} accounts", self.sender_accounts.len());
 	}
 
 	async fn run_workers(
@@ -290,27 +294,32 @@ impl SenderApp {
 		let mut tps_window = VecDeque::new();
 		let loop_start = Instant::now();
 		loop {
-			if let Ok(Some(new_best_block)) = best_block_stream.try_next().await {
-				*best_block.write().await = (new_best_block, Instant::now());
-			} else {
-				log::error!("Best block subscription lost, trying to reconnect ... ");
-				loop {
-					match api.blocks().subscribe_best().await {
-						Ok(fresh_best_block_stream) => {
-							best_block_stream = fresh_best_block_stream;
-							log::info!("Reconnected.");
-							break;
-						},
-						Err(e) => {
-							log::error!("Reconnect failed: {:?} ", e);
-							tokio::time::sleep(std::time::Duration::from_millis(
-								RECONNECT_SLEEP_MS,
-							))
-							.await;
-						},
+			match best_block_stream.next().await {
+				Some(Ok(new_best_block)) => {
+					*best_block.write().await = (new_best_block, Instant::now());
+				},
+				Some(Err(_)) | None => {
+					log::error!("Best block subscription lost, trying to reconnect ... ");
+					loop {
+						match api.blocks().subscribe_best().await {
+							Ok(fresh_best_block_stream) => {
+								best_block_stream = fresh_best_block_stream;
+								log::info!("Reconnected.");
+								break;
+							},
+							Err(e) => {
+								log::error!("Reconnect failed: {:?} ", e);
+								tokio::time::sleep(std::time::Duration::from_millis(
+									RECONNECT_SLEEP_MS,
+								))
+								.await;
+							},
+						}
 					}
-				}
+					continue;
+				},
 			}
+
 			let best_block_r = &best_block.read().await.0;
 			if self
 				.evaluate_block_metrics_and_maybe_stop(
@@ -413,6 +422,10 @@ impl SenderApp {
 		let signer = self.sender_signers[i].clone();
 		let nrecv = if cfg.batch > 1 { cfg.batch } else { 1 };
 		let receivers = self.receiver_accounts[i..i + nrecv].to_vec();
+		let receiver_id_values = receivers
+			.iter()
+			.map(|r| Value::unnamed_variant("Id", [Value::from_bytes(r.public())]))
+			.collect::<Vec<_>>();
 		tokio::spawn(async move {
 			tokio::time::sleep(std::time::Duration::from_millis(
 				((cfg.n_sender_tasks - i) as u64) * RAMP_SLOT_MS,
@@ -422,7 +435,7 @@ impl SenderApp {
 			let block_ref: BlockRef<subxt::utils::H256> =
 				BlockRef::from_hash(best_block.read().await.0.hash());
 			state.nonce = fetch_account_nonce_at_block(&api, block_ref.clone(), &sender).await;
-			let inputs = WorkerInputs { sender, signer, receivers };
+			let inputs = WorkerInputs { sender, signer, receiver_id_values };
 			loop {
 				Self::tick(i, &api, &cfg, &shared, &best_block, &inputs, &mut state).await;
 			}
@@ -454,13 +467,7 @@ impl SenderApp {
 					subxt::dynamic::tx(
 						PALLET_NAME_BALANCES,
 						CALL_NAME_TRANSFER_KEEP_ALIVE,
-						vec![
-							Value::unnamed_variant(
-								"Id",
-								[Value::from_bytes(inputs.receivers[i].public())],
-							),
-							Value::u128(TX_TRANSFER_AMOUNT),
-						],
+						vec![inputs.receiver_id_values[i].clone(), Value::u128(TX_TRANSFER_AMOUNT)],
 					)
 					.into_value()
 				})
@@ -474,10 +481,7 @@ impl SenderApp {
 			subxt::dynamic::tx(
 				PALLET_NAME_BALANCES,
 				CALL_NAME_TRANSFER_KEEP_ALIVE,
-				vec![
-					Value::unnamed_variant("Id", [Value::from_bytes(inputs.receivers[0].public())]),
-					Value::u128(TX_TRANSFER_AMOUNT),
-				],
+				vec![inputs.receiver_id_values[0].clone(), Value::u128(TX_TRANSFER_AMOUNT)],
 			)
 		};
 		let tx_params = Params::new().nonce(state.nonce).build();
@@ -486,8 +490,8 @@ impl SenderApp {
 			.create_partial_offline(&tx_payload, tx_params)
 			.expect("Failed to create partial offline transaction")
 			.sign(&inputs.signer);
-		match tx.submit_and_watch().await {
-			Ok(_watch) => {},
+		match tx.submit().await {
+			Ok(_) => {},
 			Err(err) => {
 				log::error!("{:?}", err);
 				let block_ref: BlockRef<subxt::utils::H256> =
