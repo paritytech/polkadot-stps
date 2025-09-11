@@ -24,9 +24,5 @@ pub fn derive_accounts(n: usize, seed: String) -> Vec<SrPair> {
 		}));
 	});
 
-	threads
-		.into_iter()
-		.map(|h| h.join().unwrap())
-		.flatten()
-		.collect()
+	threads.into_iter().map(|h| h.join().unwrap()).flatten().collect()
 }
