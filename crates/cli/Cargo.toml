@@ -10,6 +10,7 @@ polkadot-tx-spammer-core.workspace = true
 # External dependencies
 clap = { version = "4.5.39", features = ["derive"] }
 colored = "3.0.0"
+chrono.workspace = true
 derive_more.workspace = true
 fern = "0.7.1"
 log.workspace = true
