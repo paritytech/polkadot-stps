@@ -1,0 +1,16 @@
+[package]
+name = "polkadot-tx-spammer-core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+derive_more.workspace = true
+getset.workspace = true
+indexmap.workspace = true
+log.workspace = true
+rand.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+pretty_assertions.workspace = true
+test-log.workspace = true

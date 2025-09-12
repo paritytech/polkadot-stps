@@ -1,0 +1,19 @@
+[package]
+name = "spam"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# Internal dependencies
+polkadot-tx-spammer-core.workspace = true
+
+# External dependencies
+clap = { version = "4.5.39", features = ["derive"] }
+colored = "3.0.0"
+derive_more.workspace = true
+fern = "0.7.1"
+log.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+test-log.workspace = true
