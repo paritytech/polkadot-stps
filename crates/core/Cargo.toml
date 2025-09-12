@@ -4,12 +4,14 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+bon.workspace = true
 derive_more.workspace = true
 getset.workspace = true
 indexmap.workspace = true
 log.workspace = true
 rand.workspace = true
 thiserror.workspace = true
+url.workspace = true
 
 [dev-dependencies]
 pretty_assertions.workspace = true

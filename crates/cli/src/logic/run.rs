@@ -1,8 +1,8 @@
 use crate::prelude::*;
 
 fn try_run(cli_args: CliArgs) -> Result<(), Box<dyn std::error::Error>> {
-    let _config = Config;
-    info!("{} is running...", BINARY_NAME);
+    let config = Config::try_from(cli_args)?;
+    info!("{} is running with args: {:#?}", BINARY_NAME, config);
     Ok(())
 }
 

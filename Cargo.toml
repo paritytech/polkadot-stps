@@ -7,6 +7,7 @@ members = ["crates/cli", "crates/core"]
 polkadot-tx-spammer-core = { path = "crates/core", version = "0.1.0" }
 
 # External dependencies
+bon = "3.6.4"
 chrono = "0.4.41"
 derive_more = { version = "2.0.1", features = ["full"] }
 getset = { version = "0.1.4", default-features = false, features = [] }
@@ -16,3 +17,4 @@ pretty_assertions = "1.4.1"
 rand = "0.9.1"
 test-log = { version = "0.2.17" }
 thiserror = "2.0.12"
+url = "2.5.7"
