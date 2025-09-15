@@ -1,5 +1,5 @@
 [workspace]
-resolver = "3"
+resolver = "2"
 members = ["crates/cli", "crates/core"]
 
 [workspace.dependencies]
@@ -17,4 +17,6 @@ pretty_assertions = "1.4.1"
 rand = "0.9.1"
 test-log = { version = "0.2.17" }
 thiserror = "2.0.12"
+tokio = { version = "1.47.1", features = ["macros", "rt-multi-thread", "time"] }
 url = "2.5.7"
+futures = "0.3.31"

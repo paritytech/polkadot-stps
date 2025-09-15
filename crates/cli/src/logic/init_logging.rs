@@ -1,6 +1,6 @@
 use chrono::Local;
 use colored::{ColoredString, Colorize};
-use log::{Level, debug};
+use log::{debug, Level};
 use std::str::FromStr;
 
 const RUST_LOG_ENV: &str = "RUST_LOG";
