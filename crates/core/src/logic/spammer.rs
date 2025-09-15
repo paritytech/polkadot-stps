@@ -19,7 +19,7 @@ impl Spammer {
         let handles: Vec<_> = (0..number_of_sending_accounts)
             .map(|index_of_sending_account| {
                 task::spawn(async move {
-                    sleep(Duration::from_millis(index_of_sending_account as u64 * 100)).await;
+                    sleep(Duration::from_millis(index_of_sending_account as u64 * 20)).await;
                     println!("Task {index_of_sending_account} done");
                 })
             })
