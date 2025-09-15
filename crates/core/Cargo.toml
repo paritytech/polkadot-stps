@@ -4,6 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+# Polkadot/Substrate Crates
+frame-system = { version = "42.0.0" }
+pallet-balances = { version = "42.0.0" }
+subxt = { version = "0.44" }
+subxt-signer = { version = "0.44.0", features = ["unstable-eth"] }
+
+# Third Party Crates
 bon.workspace = true
 derive_more.workspace = true
 getset.workspace = true
