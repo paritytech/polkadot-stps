@@ -7,20 +7,35 @@ edition = "2021"
 # Polkadot/Substrate Crates
 frame-system = { version = "42.0.0" }
 pallet-balances = { version = "42.0.0" }
+parity-scale-codec = { version = "3.6.1", features = [
+    "derive",
+    "max-encoded-len",
+    "full",
+    "bit-vec",
+] }
+sp-core = { version = "38.0.0" }
+sp-runtime = { version = "43.0.0" }
 subxt = { version = "0.44" }
 subxt-signer = { version = "0.44.0", features = ["unstable-eth"] }
 
 # Third Party Crates
 bon.workspace = true
 derive_more.workspace = true
+futures.workspace = true
 getset.workspace = true
+hex.workspace = true
+impl-serde = { version = "0.5.0" }
 indexmap.workspace = true
+jsonrpsee-client-transport = { version = "0.24.8", features = ["ws"] }
+jsonrpsee-core = { version = "0.24.8", features = ["async-client"] }
+libsecp256k1 = { version = "0.7.1" }
 log.workspace = true
 rand.workspace = true
+serde.workspace = true
+sha3 = { version = "0.10.8", default-features = false }
 thiserror.workspace = true
-url.workspace = true
 tokio.workspace = true
-futures.workspace = true
+url.workspace = true
 
 [dev-dependencies]
 pretty_assertions.workspace = true

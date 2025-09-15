@@ -1,8 +1,8 @@
 use crate::prelude::*;
 
 async fn try_run(cli_args: CliArgs) -> Result<(), CliError> {
-    let config = Config::try_from(cli_args)?;
-    let spammer = Spammer::builder().config(config).build();
+    let parameters = Parameters::try_from(cli_args)?;
+    let mut spammer = Spammer::bootstrap(parameters).await?;
     spammer.run().await.map_err(CliError::CoreError)
 }
 

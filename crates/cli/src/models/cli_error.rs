@@ -15,6 +15,6 @@ pub enum CliError {
     #[error("Invalid CLI arguments")]
     InvalidCliArgs(#[from] InvalidCliArgs),
 
-    #[error("Core error")]
+    #[error("Core error {0}")]
     CoreError(#[from] Error),
 }

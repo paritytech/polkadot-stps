@@ -10,7 +10,9 @@ polkadot-tx-spammer-core = { path = "crates/core", version = "0.1.0" }
 bon = "3.6.4"
 chrono = "0.4.41"
 derive_more = { version = "2.0.1", features = ["full"] }
+futures = "0.3.31"
 getset = { version = "0.1.4", default-features = false, features = [] }
+hex = { version = "0.4.3" }
 indexmap = { version = "2.9.0", features = ["serde"] }
 log = "0.4.27"
 pretty_assertions = "1.4.1"
@@ -18,5 +20,5 @@ rand = "0.9.1"
 test-log = { version = "0.2.17" }
 thiserror = "2.0.12"
 tokio = { version = "1.47.1", features = ["macros", "rt-multi-thread", "time"] }
+serde = { version = "1.0.223", features = ["derive"] }
 url = "2.5.7"
-futures = "0.3.31"

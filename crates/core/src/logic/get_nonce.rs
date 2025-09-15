@@ -7,8 +7,6 @@ type AccountInfo = frame_system::AccountInfo<u32, pallet_balances::AccountData<u
 
 pub type Nonce = u64;
 
-
-
 #[derive(Debug, thiserror::Error)]
 pub enum GetNonceError {
     #[error("Failed to get account storage")]
@@ -43,7 +41,7 @@ pub async fn get_encoded_account_state<C>(
 where
     C: SubxtConfig,
 {
-    let account_id = account_id.into(); // subxt::dynamic::Value::from_bytes(account.into().0)
+    let account_id = account_id.into();
     let account_state_storage_addr = subxt::dynamic::storage("System", "Account", vec![account_id]);
     let account_storage = get_account_storage(api).await?;
     let account_state_encoded = account_storage
@@ -55,6 +53,17 @@ where
         .ok_or(GetNonceError::AccountNonceNotSet)?
         .into_encoded();
     Ok(account_state_encoded)
+}
+
+impl From<AnyAccountId> for subxt::dynamic::Value {
+    fn from(account_id: AnyAccountId) -> Self {
+        match account_id {
+            AnyAccountId::EthereumCompat(a) => subxt::dynamic::Value::from_bytes(a.0),
+            AnyAccountId::PolkadotBased(a) => {
+                subxt::dynamic::Value::from_bytes(a.as_ref().as_ref() as &[u8])
+            }
+        }
+    }
 }
 
 /// Fetch the current nonce for an account
