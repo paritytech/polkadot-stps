@@ -1,4 +1,3 @@
-
 use subxt::ext::codec::Decode;
 use subxt::storage::Storage;
 
@@ -10,13 +9,13 @@ pub type Nonce = u64;
 
 #[derive(Debug, thiserror::Error)]
 pub enum GetNonceError {
-    #[error("Failed to get account storage")]
+    #[error("Failed to get account storage {underlying}")]
     AccountStorageFetchFailed { underlying: subxt::Error },
 
-    #[error("Failed to get account status")]
+    #[error("Failed to get account status {underlying}")]
     AccountStatusFetchFailed { underlying: String },
 
-    #[error("Failed to decode encoded account state")]
+    #[error("Failed to decode encoded account state {underlying}")]
     EncodedAccountStateDecodeFailed { underlying: String },
 
     #[error("Account nonce not set but it should be")]
@@ -35,18 +34,41 @@ where
         .map_err(|e| GetNonceError::AccountStorageFetchFailed { underlying: e })
 }
 
+impl From<AnySigner> for StorageAddress {
+    fn from(value: AnySigner) -> Self {
+        use subxt::tx::Signer;
+        Self::from(value.account_id())
+    }
+}
+
+impl From<AnyAccountId> for StorageAddress {
+    fn from(value: AnyAccountId) -> Self {
+        subxt::dynamic::storage(
+            "System",
+            "Account",
+            vec![subxt::dynamic::Value::from(value)],
+        )
+    }
+}
+
+pub type StorageAddress = subxt::storage::DefaultAddress<
+    Vec<subxt::dynamic::Value>,
+    subxt::dynamic::DecodedValueThunk,
+    subxt::utils::Yes,
+    subxt::utils::Yes,
+    subxt::utils::Yes,
+>;
+
 pub async fn get_encoded_account_state<C>(
     api: &OnlineClient<C>,
-    account_id: impl Into<subxt::dynamic::Value>,
+    address: impl Into<StorageAddress>,
 ) -> Result<Option<Vec<u8>>, GetNonceError>
 where
     C: SubxtConfig,
 {
-    let account_id = account_id.into();
     let account_storage = get_account_storage(api).await?;
-    let account_state_storage_addr = subxt::dynamic::storage("System", "Account", vec![account_id]);
     let account_state_encoded = account_storage
-        .fetch(&account_state_storage_addr)
+        .fetch(&address.into())
         .await
         .map_err(|e| GetNonceError::AccountStatusFetchFailed {
             underlying: e.to_debug_string(),
@@ -69,12 +91,12 @@ impl From<AnyAccountId> for subxt::dynamic::Value {
 /// Fetch the current nonce for an account
 pub async fn get_nonce<C>(
     api: &OnlineClient<C>,
-    account_id: impl Into<subxt::dynamic::Value>,
+    address: impl Into<StorageAddress>,
 ) -> Result<Nonce, GetNonceError>
 where
     C: SubxtConfig,
 {
-    let Some(encoded_account_state) = get_encoded_account_state(api, account_id).await? else {
+    let Some(encoded_account_state) = get_encoded_account_state(api, address).await? else {
         let default_nonce = Nonce::default();
         info!("Using default nonce {default_nonce}");
         return Ok(default_nonce);
