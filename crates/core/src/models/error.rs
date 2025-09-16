@@ -6,7 +6,7 @@ pub enum Error {
     Bootstrap(#[from] BootstrapSpammerError),
 
     #[error("Get nonce error {0}")]
-    GetNonceError(#[from] GetNonceError),
+    GetNonceError(#[from] Box<GetNonceError>),
 }
 
 #[derive(Debug, thiserror::Error)]

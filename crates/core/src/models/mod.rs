@@ -15,7 +15,7 @@ pub use error::*;
 pub use ethereum::*;
 pub use parameters::*;
 pub use polkadot::*;
-pub use sender::*;
+pub(crate) use sender::*;
 pub use spammer::*;
 pub use state::*;
 pub use traits::*;

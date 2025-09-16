@@ -47,8 +47,6 @@ impl Signer<EthConfig> for EthereumSigner {
     fn sign(&self, signer_payload: &[u8]) -> EthSignature {
         let hash = keccak_256(signer_payload);
         let wrapped = libsecp256k1::Message::parse_slice(&hash).unwrap();
-        self.signer
-            .sign_prehashed(&wrapped.0.b32())
-            .into()
+        self.signer.sign_prehashed(&wrapped.0.b32()).into()
     }
 }

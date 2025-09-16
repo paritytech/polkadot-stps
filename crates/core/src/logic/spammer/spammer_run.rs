@@ -1,4 +1,3 @@
-
 use crate::prelude::*;
 
 use futures::future::try_join_all;
@@ -34,7 +33,7 @@ impl Spammer {
     async fn submit_transaction(
         &self,
         sender: &mut Sender,
-        recipients: Vec<AnyKeyPair>,
+        recipients: IndexSet<Receiver>,
     ) -> Result<(), Error> {
         sender.submit_transaction(self.api(), recipients)
     }

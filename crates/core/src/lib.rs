@@ -11,7 +11,7 @@ pub mod prelude {
 
     // Third Party Crates
     pub use bon::Builder;
-    pub use derive_more::{AsRef, From};
+    pub use derive_more::{AsRef, Deref, From};
     pub use getset::Getters;
     pub use indexmap::IndexSet;
     pub use log::{debug, error, info, warn};

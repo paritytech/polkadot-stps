@@ -6,8 +6,7 @@ use futures::future::join_all;
 use indexmap::IndexSet;
 use jsonrpsee_core::client::Client;
 use subxt::{
-    backend::legacy::LegacyBackend,
-    ext::jsonrpsee::client_transport::ws::WsTransportClientBuilder,
+    backend::legacy::LegacyBackend, ext::jsonrpsee::client_transport::ws::WsTransportClientBuilder,
 };
 use tokio::time::Duration;
 
@@ -37,6 +36,8 @@ async fn create_api(node_url: Url) -> Result<Api, BootstrapSpammerError> {
 
 impl Spammer {
     pub async fn bootstrap(parameters: Parameters) -> Result<Self, Error> {
+        debug!("Bootstrapping spammer with parameters: {parameters:?}");
+
         let api = create_api(parameters.node_url().clone())
             .await
             .map_err(Error::Bootstrap)?;
@@ -44,31 +45,28 @@ impl Spammer {
         let number_of_sending_accounts = *parameters.number_of_sending_accounts();
         let number_of_receiving_accounts = 10;
 
-        let sender_key_pairs = derive_accounts(
+        let senders_futures = derive_accounts(
             number_of_sending_accounts,
             parameters.sender_seed().clone(),
             *parameters.chain(),
-        );
+        )
+        .into_iter()
+        .map(|signer| Sender::new(signer, &api))
+        .collect::<Vec<_>>();
 
-        let receiver_key_pairs = derive_accounts(
-            number_of_receiving_accounts,
-            parameters.receiver_seed().clone(),
-            *parameters.chain(),
-        );
-        let receivers = receiver_key_pairs
-            .into_iter()
-            .map(AnyAccountId::from)
-            .collect::<IndexSet<_>>();
-
-        let senders = sender_key_pairs
-            .into_iter()
-            .map(|signer| Sender::new(signer, &api))
-            .collect::<Vec<_>>();
-
-        let senders = join_all(senders)
+        let senders = join_all(senders_futures)
             .await
             .into_iter()
             .collect::<Result<IndexSet<_>, _>>()?;
+
+        let receivers = derive_accounts(
+            number_of_receiving_accounts,
+            parameters.receiver_seed().clone(),
+            *parameters.chain(),
+        )
+        .into_iter()
+        .map(AnyAccountId::from)
+        .collect::<IndexSet<_>>();
 
         let state = State::builder()
             .chain(*parameters.chain())

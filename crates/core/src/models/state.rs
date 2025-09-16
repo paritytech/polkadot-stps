@@ -1,5 +1,6 @@
 use crate::prelude::*;
 
+pub type Receiver = AnyAccountId;
 
 #[derive(Debug, Clone, Getters, Builder)]
 pub struct State {
@@ -11,9 +12,9 @@ pub struct State {
 
     #[getset(get = "pub")]
     senders: IndexSet<Sender>,
-    
+
     #[getset(get = "pub")]
-    receivers: IndexSet<AnyAccountId>,
+    receivers: IndexSet<Receiver>,
 
     #[getset(get = "pub")]
     tps: usize,

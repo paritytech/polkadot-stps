@@ -22,4 +22,3 @@ pub struct Parameters {
 }
 
 pub type Api = OnlineClient<AnyConfig>;
-

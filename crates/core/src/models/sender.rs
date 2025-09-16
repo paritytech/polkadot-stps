@@ -8,22 +8,29 @@ pub(crate) struct Sender {
 
 impl Sender {
     pub(crate) async fn new(
-        key_pair: AnyKeyPair,
+        signer: AnySigner,
         api: &OnlineClient<AnyConfig>,
     ) -> Result<Self, Error> {
         use subxt::tx::Signer;
-        let signer = AnySigner::from(key_pair);
-        let nonce = get_nonce(api, signer.account_id()).await?;
+        let nonce = get_nonce(api, signer.account_id())
+            .await
+            .map_err(|e| Error::GetNonceError(Box::new(e)))?;
         Ok(Self { nonce, signer })
+    }
+
+    pub(crate) async fn from_pair(
+        key_pair: AnyKeyPair,
+        api: &OnlineClient<AnyConfig>,
+    ) -> Result<Self, Error> {
+        let signer = AnySigner::from(key_pair);
+        Self::new(signer, api).await
     }
 
     pub(crate) fn submit_transaction(
         &mut self,
-        api: &OnlineClient<AnyConfig>,
-        recipients: impl IntoIterator<Item = AnyKeyPair>,
+        _api: &OnlineClient<AnyConfig>,
+        _recipients: IndexSet<Receiver>,
     ) -> Result<(), Error> {
-        let recipients = recipients.into_iter().collect::<IndexSet<AnyKeyPair>>();
-
         // recipients.into_iter()
         // let individual_txs = subxt::dynamic::tx(
         //     "Balances",
@@ -45,7 +52,7 @@ impl Sender {
         //     .nonce(self.nonce)
         //     .build();
 
-        // self.nonce += 1;
+        self.nonce += 1;
 
         // api.tx()
         //     .create_partial_offline(&batched_tx, tx_params)

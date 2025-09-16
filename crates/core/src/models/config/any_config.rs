@@ -52,8 +52,10 @@ impl PartialEq for AnyKeyPair {
     From,
     AsRef,
     derive_more::Debug,
+    derive_more::Display,
 )]
-#[debug("{}", self.0)]
+#[debug("{:?}", self.0)]
+#[display("{}", self.0)]
 #[serde(transparent)]
 #[from(AccountId32, [u8; 32])]
 pub struct PolkaAccountId(AccountId32);
@@ -87,19 +89,19 @@ impl Signer<AnyConfig> for AnySigner {
         }
     }
 
-    fn sign(&self, payload: &[u8]) -> AnySignature {
+    fn sign(&self, _payload: &[u8]) -> AnySignature {
         match self {
-            AnySigner::PolkadotBased(s) => {
+            AnySigner::PolkadotBased(_s) => {
                 todo!()
             }
-            AnySigner::EthereumCompat(s) => {
+            AnySigner::EthereumCompat(_s) => {
                 todo!()
             }
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize, From, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, From, PartialEq, Eq, Hash, derive_more::Display)]
 pub enum AnyAccountId {
     EthereumCompat(EthAccountId),
     PolkadotBased(PolkaAccountId),
@@ -114,7 +116,11 @@ impl FromSr25519 for PolkaAccountId {
         PolkaAccountId::from(value.public().0)
     }
 }
-
+impl From<AnySigner> for AnyAccountId {
+    fn from(signer: AnySigner) -> Self {
+        signer.account_id()
+    }
+}
 impl From<AnyKeyPair> for AnyAccountId {
     fn from(key_pair: AnyKeyPair) -> Self {
         match key_pair {
