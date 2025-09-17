@@ -115,9 +115,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 	let sender_accounts = funder_lib::derive_accounts(n_tx_sender, SENDER_SEED.to_owned());
 	let receiver_accounts = funder_lib::derive_accounts(n_tx_sender, RECEIVER_SEED.to_owned());
-	let alice = <SrPair as Pair>::from_string(&ALICE_SEED, None).unwrap();
-	let alice_signer = PairSigner::new(alice.clone());
-
+	
 	async fn create_api(node_url: String) -> OnlineClient<PolkadotConfig> {
 		let node_url = url::Url::parse(&node_url).unwrap();
 		let (node_sender, node_receiver) =
@@ -133,24 +131,27 @@ fn main() -> Result<(), Box<dyn Error>> {
 		OnlineClient::from_backend(backend).await.unwrap()
 	}
 
-	if args.seed {
-		log::info!("Seeding accounts");
 
+	fn seed_senders(node_url: String, sender_accounts: &[SrPair]) {
+		let alice = <SrPair as Pair>::from_string(&ALICE_SEED, None).unwrap();
+	
+		let alice_signer = PairSigner::new(alice.clone());
+
+		log::info!("Seeding accounts");
+	
 		tokio::runtime::Builder::new_multi_thread()
 			.enable_all()
 			.build()
 			.unwrap()
 			.block_on(async {
-				let node_url = args.node_url.clone();
+				let node_url = node_url.clone();
 				let api = create_api(node_url.clone()).await;
 				let mut best_block_stream =
 					api.blocks().subscribe_best().await.expect("Subscribe to best block failed");
 				let best_block = best_block_stream.next().await.unwrap().unwrap();
 				let block_ref: BlockRef<subxt::utils::H256> =
 					BlockRef::from_hash(best_block.hash());
-
 				let mut nonce = get_account_nonce(&api, block_ref.clone(), &alice).await;
-
 				for sender in sender_accounts.iter() {
 					let payload = subxt::dynamic::tx(
 						"Balances",
@@ -160,16 +161,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 							Value::u128(100000000000000000000),
 						],
 					);
-
 					let tx_params = Params::new().nonce(nonce as u64).build();
-
 					let tx: SubmittableTransaction<_, OnlineClient<_>> = api
 						.tx()
 						.create_partial(&payload, &alice_signer.account_id(), tx_params)
 						.await
 						.unwrap()
 						.sign(&alice_signer);
-
 					let _ = match tx.submit_and_watch().await {
 						Ok(watch) => {
 							log::info!("Seeded account");
@@ -183,6 +181,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 					};
 				}
 			});
+	}
+
+
+	if args.seed {
+		seed_senders(args.node_url.clone(), &sender_accounts);
 	}
 
 	while !args.seed {
@@ -290,7 +293,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 										],
 									)
 								};
-								log::debug!("Sender {} using nonce {}", i, nonce);
 								let tx_params = Params::new().nonce(nonce as u64).build();
 
 								let tx: SubmittableTransaction::<_, OnlineClient<_>> = api
@@ -406,6 +408,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 						handle.abort();
 					}
 					log::info!("Restarting senders");
+
 				}
 			}
 		);
