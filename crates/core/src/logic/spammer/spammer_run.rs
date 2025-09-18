@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::prelude::*;
 
 use futures::future::try_join_all;
@@ -9,23 +11,24 @@ const SLEEP_BETWEEN_TICK_DURATION_MS: u64 = 1000;
 impl Spammer {
     pub async fn run(&mut self) -> Result<(), Error> {
         loop {
-            self.tick().await?;
-            Self::sleep_between_ticks().await;
+            let elapsed = self.tick().await?;
+            Self::sleep_between_ticks(elapsed).await;
         }
     }
 
-    async fn sleep_between_ticks() {
-        log::info!(
-            "Sleeping between ticks ({} ms)",
-            SLEEP_BETWEEN_TICK_DURATION_MS
-        );
-        tokio::time::sleep(std::time::Duration::from_millis(
-            SLEEP_BETWEEN_TICK_DURATION_MS,
-        ))
-        .await;
+    async fn sleep_between_ticks(elapsed: Duration) {
+        let sleep_duration =
+            SLEEP_BETWEEN_TICK_DURATION_MS.saturating_sub(elapsed.as_millis() as u64);
+        if sleep_duration > 0 {
+            info!("Sleeping between ticks ({} ms)", sleep_duration);
+            tokio::time::sleep(std::time::Duration::from_millis(sleep_duration)).await;
+        } else {
+            info!("Tick took longer than the sleep duration, skipping sleep");
+        }
     }
 
-    async fn tick(&mut self) -> Result<(), Error> {
+    async fn tick(&mut self) -> Result<Duration, Error> {
+        let time = std::time::Instant::now();
         let (api, recipients) = {
             let s = self.state();
             (s.api().clone(), s.recipients().clone())
@@ -52,7 +55,9 @@ impl Spammer {
         try_join_all(handles)
             .await
             .map_err(|e| Error::JoinSendersError(Box::new(e)))?;
-        Ok(())
+        let elapsed = time.elapsed();
+        info!("Tick completed in {:.2?}", elapsed);
+        Ok(elapsed)
     }
 
     #[builder]
