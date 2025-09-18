@@ -1,8 +1,10 @@
+use getset::MutGetters;
+
 use crate::prelude::*;
 
 pub type Receiver = AnyAccountId;
 
-#[derive(Debug, Clone, Getters, Builder)]
+#[derive(Debug, Clone, Getters, MutGetters, Builder)]
 pub struct State {
     #[getset(get = "pub")]
     chain: Chain,
@@ -10,7 +12,7 @@ pub struct State {
     #[getset(get = "pub")]
     api: Api,
 
-    #[getset(get = "pub")]
+    #[getset(get_mut = "pub")]
     senders: IndexSet<Sender>,
 
     #[getset(get = "pub")]

@@ -3,6 +3,8 @@ use crate::prelude::*;
 use sp_core::{ecdsa, keccak_256};
 use subxt::tx::Signer;
 
+pub type EthSignature = [u8; 65];
+
 #[derive(Clone, derive_more::Debug, Getters)]
 #[debug("EthereumSigner({})", account_id)]
 pub struct EthereumSigner {

@@ -1,40 +1,59 @@
 use crate::prelude::*;
 
 use futures::future::try_join_all;
-use tokio::{
-    task,
-    time::{sleep, Duration},
-};
+use tokio::task;
+
+const SLEEP_BETWEEN_TICK_DURATION_MS: u64 = 1000;
 
 impl Spammer {
     pub async fn run(&mut self) -> Result<(), Error> {
-        let handles: Vec<_> = self
-            .state_mut()
-            .senders()
-            .iter()
-            .enumerate()
-            .map(|(index_of_sending_account, _sender)| {
-                task::spawn(async move {
-                    sleep(Duration::from_millis(index_of_sending_account as u64 * 20)).await;
-                    println!("Task {index_of_sending_account} done");
-                })
+        loop {
+            self.tick().await?;
+            Self::sleep_between_ticks().await;
+        }
+    }
+
+    async fn sleep_between_ticks() {
+        log::info!(
+            "Sleeping between ticks ({} ms)",
+            SLEEP_BETWEEN_TICK_DURATION_MS
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(
+            SLEEP_BETWEEN_TICK_DURATION_MS,
+        ))
+        .await;
+    }
+
+    async fn tick(&mut self) -> Result<(), Error> {
+        let (api, receivers) = {
+            let s = self.state();
+            (s.api().clone(), s.receivers().clone())
+        };
+
+        let senders: Vec<_> = { self.state_mut().senders_mut().iter().cloned().collect() };
+
+        let handles: Vec<_> = senders
+            .into_iter()
+            .map(|sender| {
+                let api = api.clone();
+                let receivers = receivers.clone();
+                task::spawn(
+                    async move { Self::submit_transactions_for(api, receivers, sender).await },
+                )
             })
             .collect();
 
-        // Wait for all tasks to finish (panic on join error like before)
-        try_join_all(handles).await.unwrap();
+        try_join_all(handles)
+            .await
+            .map_err(|e| Error::JoinSendersError(Box::new(e)))?;
         Ok(())
     }
 
-    fn api(&self) -> &Api {
-        self.state().api()
-    }
-
-    async fn submit_transaction(
-        &self,
-        sender: &mut Sender,
-        recipients: IndexSet<Receiver>,
+    async fn submit_transactions_for(
+        api: Api,
+        receivers: IndexSet<Receiver>,
+        sender: Sender,
     ) -> Result<(), Error> {
-        sender.submit_transaction(self.api(), recipients)
+        sender.submit_transactions(&api, receivers).await
     }
 }

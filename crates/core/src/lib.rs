@@ -10,7 +10,7 @@ pub mod prelude {
     pub use subxt::OnlineClient;
 
     // Third Party Crates
-    pub use bon::Builder;
+    pub use bon::{bon, builder, Builder};
     pub use derive_more::{AsRef, Deref, From};
     pub use getset::Getters;
     pub use indexmap::IndexSet;
