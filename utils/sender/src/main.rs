@@ -6,14 +6,12 @@ use std::{
 	collections::VecDeque,
 	error::Error,
 	sync::atomic::{AtomicU64, Ordering},
-	time::Instant,
+	time::Instant, u128,
 };
-// use subxt::{ext::sp_core::Pair, utils::AccountId32, OnlineClient, PolkadotConfig};
 
 use sp_core::{sr25519::Pair as SrPair, Pair};
 use subxt::{
-	blocks::BlockRef, config::polkadot::PolkadotExtrinsicParamsBuilder as Params, dynamic::Value,
-	tx::SubmittableTransaction, OnlineClient, PolkadotConfig,
+	blocks::BlockRef, config::polkadot::PolkadotExtrinsicParamsBuilder as Params, dynamic::Value, ext::scale_value::{Primitive, ValueDef}, tx::SubmittableTransaction, OnlineClient, PolkadotConfig
 };
 use tokio::sync::RwLock;
 
@@ -22,6 +20,14 @@ use sender_lib::PairSigner;
 const SENDER_SEED: &str = "//Sender";
 const RECEIVER_SEED: &str = "//Receiver";
 const ALICE_SEED: &str = "//Alice";
+
+/// Amount to send in each transaction, small so that we can do many transactions before
+/// running out of funds.
+const SMALL_TOKEN_AMOUNT: Value = Value { value: ValueDef::Primitive(Primitive::U128(1)), context: () };
+
+/// Amount to seed each sender with, largest possible value so that we do not run out of funds.
+const BIG_TOKEN_AMOUNT: Value = Value { value: ValueDef::Primitive(Primitive::U128(u128::MAX)), context: () };
+
 
 /// Util program to send transactions
 #[derive(Parser, Debug)]
@@ -157,7 +163,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 						"transfer_keep_alive",
 						vec![
 							Value::unnamed_variant("Id", [Value::from_bytes(sender.public())]),
-							Value::u128(100000000000000000000),
+							BIG_TOKEN_AMOUNT,
 						],
 					);
 
@@ -270,7 +276,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 											"transfer_keep_alive",
 											vec![
 												Value::unnamed_variant("Id", [Value::from_bytes(receivers[i].public())]),
-												Value::u128(1000000000000),
+												SMALL_TOKEN_AMOUNT,
 											],
 										).into_value()
 									).collect::<Vec<_>>();
@@ -286,7 +292,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 										"transfer_keep_alive",
 										vec![
 											Value::unnamed_variant("Id", [Value::from_bytes(receivers[0].public())]),
-											Value::u128(1000000000000),
+											SMALL_TOKEN_AMOUNT,
 										],
 									)
 								};
