@@ -2,13 +2,19 @@ use sp_core::{ecdsa, sr25519, Pair};
 
 use crate::prelude::*;
 
+#[builder]
 pub fn derive_accounts(n: usize, seed: impl AsRef<str>, chain: Chain) -> IndexSet<AnySigner> {
-    derive_keys(n, seed, chain)
+    derive_keys()
+        .n(n)
+        .seed(seed)
+        .chain(chain)
+        .call()
         .into_iter()
         .map(AnySigner::from)
         .collect()
 }
 
+#[builder]
 fn derive_keys(n: usize, seed: impl AsRef<str>, chain: Chain) -> IndexSet<AnyKeyPair> {
     match chain {
         Chain::Ethereum => _derive_keys::<ecdsa::Pair>(n, seed)
@@ -95,7 +101,11 @@ mod tests {
             .map(|s| s.to_string())
             .collect::<IndexSet<_>>();
 
-        let accounts = derive_accounts(expected.len(), seed, chain)
+        let accounts = derive_accounts()
+            .n(expected.len())
+            .seed(seed)
+            .chain(chain)
+            .call()
             .into_iter()
             .map(|s| s.account_id())
             .collect::<IndexSet<_>>();

@@ -5,6 +5,7 @@ use tokio::task;
 
 const SLEEP_BETWEEN_TICK_DURATION_MS: u64 = 1000;
 
+#[bon]
 impl Spammer {
     pub async fn run(&mut self) -> Result<(), Error> {
         loop {
@@ -25,9 +26,9 @@ impl Spammer {
     }
 
     async fn tick(&mut self) -> Result<(), Error> {
-        let (api, receivers) = {
+        let (api, recipients) = {
             let s = self.state();
-            (s.api().clone(), s.receivers().clone())
+            (s.api().clone(), s.recipients().clone())
         };
 
         let senders: Vec<_> = { self.state_mut().senders_mut().iter().cloned().collect() };
@@ -36,10 +37,15 @@ impl Spammer {
             .into_iter()
             .map(|sender| {
                 let api = api.clone();
-                let receivers = receivers.clone();
-                task::spawn(
-                    async move { Self::submit_transactions_for(api, receivers, sender).await },
-                )
+                let recipients = recipients.clone();
+                task::spawn(async move {
+                    Self::submit_transactions()
+                        .to(recipients)
+                        .from(sender)
+                        .using(&api)
+                        .call()
+                        .await
+                })
             })
             .collect();
 
@@ -49,11 +55,18 @@ impl Spammer {
         Ok(())
     }
 
-    async fn submit_transactions_for(
-        api: Api,
-        receivers: IndexSet<Receiver>,
-        sender: Sender,
+    #[builder]
+    async fn submit_transactions(
+        to: IndexSet<Recipient>,
+        from: Sender,
+        using: &Api,
     ) -> Result<(), Error> {
-        sender.submit_transactions(&api, receivers).await
+        let (recipients, sender, api) = (to, from, using);
+        sender
+            .submit_transactions()
+            .to(recipients)
+            .using(api)
+            .call()
+            .await
     }
 }

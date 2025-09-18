@@ -34,7 +34,43 @@ async fn create_api(node_url: Url) -> Result<Api, BootstrapSpammerError> {
     Ok(api)
 }
 
+#[bon]
 impl Spammer {
+    #[builder]
+    async fn build_senders(
+        n: usize,
+        parameters: &Parameters,
+        using: &Api,
+    ) -> Result<IndexSet<Sender>> {
+        let api = using;
+        let senders_futures = derive_accounts()
+            .n(n)
+            .seed(parameters.sender_seed().clone())
+            .chain(*parameters.chain())
+            .call()
+            .into_iter()
+            .map(|signer| Sender::new(signer, api))
+            .collect::<Vec<_>>();
+
+        join_all(senders_futures)
+            .await
+            .into_iter()
+            .collect::<Result<IndexSet<_>, _>>()
+    }
+
+    #[builder]
+    fn build_recipients(n: usize, parameters: &Parameters) -> IndexSet<Recipient> {
+        let number_of_receiving_accounts = n;
+        derive_accounts()
+            .n(number_of_receiving_accounts)
+            .seed(parameters.receiver_seed().clone())
+            .chain(*parameters.chain())
+            .call()
+            .into_iter()
+            .map(AnyAccountId::from)
+            .collect::<IndexSet<_>>()
+    }
+
     pub async fn bootstrap(parameters: Parameters) -> Result<Self, Error> {
         debug!("Bootstrapping spammer with parameters: {parameters:?}");
 
@@ -45,34 +81,23 @@ impl Spammer {
         let number_of_sending_accounts = *parameters.number_of_sending_accounts();
         let number_of_receiving_accounts = 10;
 
-        let senders_futures = derive_accounts(
-            number_of_sending_accounts,
-            parameters.sender_seed().clone(),
-            *parameters.chain(),
-        )
-        .into_iter()
-        .map(|signer| Sender::new(signer, &api))
-        .collect::<Vec<_>>();
+        let senders = Self::build_senders()
+            .n(number_of_sending_accounts)
+            .parameters(&parameters)
+            .using(&api)
+            .call()
+            .await?;
 
-        let senders = join_all(senders_futures)
-            .await
-            .into_iter()
-            .collect::<Result<IndexSet<_>, _>>()?;
-
-        let receivers = derive_accounts(
-            number_of_receiving_accounts,
-            parameters.receiver_seed().clone(),
-            *parameters.chain(),
-        )
-        .into_iter()
-        .map(AnyAccountId::from)
-        .collect::<IndexSet<_>>();
+        let recipients = Self::build_recipients()
+            .n(number_of_receiving_accounts)
+            .parameters(&parameters)
+            .call();
 
         let state = State::builder()
             .chain(*parameters.chain())
             .api(api)
             .senders(senders)
-            .receivers(receivers)
+            .recipients(recipients)
             .tps(*parameters.tps())
             .build();
 

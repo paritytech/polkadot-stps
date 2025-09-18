@@ -1,13 +1,8 @@
-
 use crate::prelude::*;
 use std::sync::{
     atomic::{AtomicU64, Ordering},
     Arc,
 };
-
-use subxt::config::polkadot::PolkadotExtrinsicParamsBuilder as GenTxParams;
-
-pub type TxParams = GenTxParams<AnyConfig>;
 
 #[derive(Debug, Clone)]
 pub(crate) struct Sender {
@@ -29,26 +24,32 @@ impl std::hash::Hash for Sender {
     }
 }
 
+#[bon]
 impl Sender {
     pub(crate) async fn new(
         signer: AnySigner,
         api: &OnlineClient<AnyConfig>,
     ) -> Result<Self, Error> {
-        use subxt::tx::Signer;
-        let nonce = get_nonce(api, signer.account_id())
+        let nonce = get_nonce()
+            .of(&signer)
+            .using(api)
+            .call()
             .await
             .map_err(|e| Error::GetNonceError(Box::new(e)))?;
+
         Ok(Self {
             nonce: Arc::new(AtomicU64::new(nonce)),
             signer,
         })
     }
 
-    async fn submit_transaction(
+    #[builder]
+    async fn submit(
         &self,
-        api: &OnlineClient<AnyConfig>,
         transaction: Transaction,
+        using: &OnlineClient<AnyConfig>,
     ) -> Result<(), Error> {
+        let api = using;
         let tx_description = transaction.to_string();
         let mut signable = transaction.into_signable_tx(api)?;
         let submittable = signable // TODO change to map_err
@@ -64,19 +65,22 @@ impl Sender {
         self.nonce.fetch_add(1, Ordering::SeqCst)
     }
 
+    #[builder]
     pub(crate) async fn submit_transactions(
         &self,
-        api: &OnlineClient<AnyConfig>,
-        recipients: IndexSet<Receiver>,
+        to: IndexSet<Recipient>,
+        using: &OnlineClient<AnyConfig>,
     ) -> Result<(), Error> {
+        let (recipients, api) = (to, using);
         let nonce = self.next_nonce();
         let transaction = Transaction::transfer()
             .recipients(recipients)
             .nonce(nonce)
             .call();
-        self.submit_transaction(api, transaction).await
+        self.submit()
+            .transaction(transaction)
+            .using(api)
+            .call()
+            .await
     }
 }
-
-
-pub type Recipient = AnyAccountId;

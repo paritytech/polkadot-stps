@@ -2,7 +2,7 @@ use getset::MutGetters;
 
 use crate::prelude::*;
 
-pub type Receiver = AnyAccountId;
+pub type Recipient = AnyAccountId;
 
 #[derive(Debug, Clone, Getters, MutGetters, Builder)]
 pub struct State {
@@ -16,7 +16,7 @@ pub struct State {
     senders: IndexSet<Sender>,
 
     #[getset(get = "pub")]
-    receivers: IndexSet<Receiver>,
+    recipients: IndexSet<Recipient>,
 
     #[getset(get = "pub")]
     tps: usize,

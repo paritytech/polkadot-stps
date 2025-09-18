@@ -1,6 +1,11 @@
 use crate::prelude::*;
 
-use subxt::tx::{DynamicPayload, PartialTransaction};
+use subxt::{
+    config::polkadot::PolkadotExtrinsicParamsBuilder as GenTxParams,
+    tx::{DynamicPayload, PartialTransaction},
+};
+
+pub type TxParams = GenTxParams<AnyConfig>;
 
 // Later we might change this into a tagged union if we want to support more transaction types.
 pub type Transaction = TokenTransferTransaction;

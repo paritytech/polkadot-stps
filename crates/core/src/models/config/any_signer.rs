@@ -8,6 +8,13 @@ pub enum AnySigner {
     EthereumCompat(EthereumSigner),
 }
 
+impl From<&AnySigner> for StorageAddress {
+    fn from(value: &AnySigner) -> Self {
+        use subxt::tx::Signer;
+        Self::from(value.account_id())
+    }
+}
+
 impl From<AnyKeyPair> for AnySigner {
     fn from(key_pair: AnyKeyPair) -> Self {
         match key_pair {
