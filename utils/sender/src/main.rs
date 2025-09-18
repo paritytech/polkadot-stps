@@ -6,12 +6,18 @@ use std::{
 	collections::VecDeque,
 	error::Error,
 	sync::atomic::{AtomicU64, Ordering},
-	time::Instant, u128,
+	time::Instant,
+	u128,
 };
 
 use sp_core::{sr25519::Pair as SrPair, Pair};
 use subxt::{
-	blocks::BlockRef, config::polkadot::PolkadotExtrinsicParamsBuilder as Params, dynamic::Value, ext::scale_value::{Primitive, ValueDef}, tx::SubmittableTransaction, OnlineClient, PolkadotConfig
+	blocks::BlockRef,
+	config::polkadot::PolkadotExtrinsicParamsBuilder as Params,
+	dynamic::Value,
+	ext::scale_value::{Primitive, ValueDef},
+	tx::SubmittableTransaction,
+	OnlineClient, PolkadotConfig,
 };
 use tokio::sync::RwLock;
 
@@ -23,11 +29,12 @@ const ALICE_SEED: &str = "//Alice";
 
 /// Amount to send in each transaction, small so that we can do many transactions before
 /// running out of funds.
-const SMALL_TOKEN_AMOUNT: Value = Value { value: ValueDef::Primitive(Primitive::U128(1)), context: () };
+const SMALL_TOKEN_AMOUNT: Value =
+	Value { value: ValueDef::Primitive(Primitive::U128(1)), context: () };
 
 /// Amount to seed each sender with, largest possible value so that we do not run out of funds.
-const BIG_TOKEN_AMOUNT: Value = Value { value: ValueDef::Primitive(Primitive::U128(u128::MAX)), context: () };
-
+const BIG_TOKEN_AMOUNT: Value =
+	Value { value: ValueDef::Primitive(Primitive::U128(u128::MAX)), context: () };
 
 /// Util program to send transactions
 #[derive(Parser, Debug)]
