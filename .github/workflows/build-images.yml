@@ -15,7 +15,7 @@ jobs:
       uses:                       redhat-actions/buildah-build@v2
       with:
         image:                    stps-funder
-        tags:                     latest
+        tags:                     funder-latest
         dockerfiles: |
           ./utils/dockerfiles/Dockerfile.funder
         build-args: |
@@ -28,7 +28,7 @@ jobs:
       with:
         registry:                 docker.io/paritytech
         image:                    stps-funder
-        tags:                     latest
+        tags:                     funder-latest
         username:                 ${{ secrets.DOCKERHUB_USERNAME }}
         password:                 ${{ secrets.DOCKERHUB_TOKEN }}
 
@@ -36,7 +36,7 @@ jobs:
       run: |
         echo "New image has been pushed to ${{ steps.push-to-dockerhub.outputs.registry-path }}"
   
-  sender-tick:
+  sender:
     name:                         Build and push sender image
     runs-on:                      ubuntu-latest
     steps:
