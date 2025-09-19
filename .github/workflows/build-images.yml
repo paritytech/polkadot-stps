@@ -37,7 +37,7 @@ jobs:
         echo "New image has been pushed to ${{ steps.push-to-dockerhub.outputs.registry-path }}"
   
   sender-tick:
-    name:                         Build and push sender (tick) image
+    name:                         Build and push sender image
     runs-on:                      ubuntu-latest
     steps:
     - uses:                       actions/checkout@v4
@@ -45,7 +45,7 @@ jobs:
       uses:                       redhat-actions/buildah-build@v2
       with:
         image:                    stps-sender
-        tags:                     tick-latest
+        tags:                     sender-latest
         dockerfiles: |
           ./utils/dockerfiles/Dockerfile.sender
         build-args: |
@@ -59,7 +59,7 @@ jobs:
       with:
         registry:                 docker.io/paritytech
         image:                    stps-sender
-        tags:                     tick-latest
+        tags:                     sender-latest
         username:                 ${{ secrets.DOCKERHUB_USERNAME }}
         password:                 ${{ secrets.DOCKERHUB_TOKEN }}
 
@@ -67,219 +67,3 @@ jobs:
       run: |
         echo "New image has been pushed to ${{ steps.push-to-dockerhub.outputs.registry-path }}"
   
-  tps-tick:
-    name:                         Build and push tps (tick) image
-    runs-on:                      ubuntu-latest
-    steps:
-    - uses:                       actions/checkout@v4
-    - name:                       Build Image
-      uses:                       redhat-actions/buildah-build@v2
-      with:
-        image:                    stps-tps
-        tags:                     tick-latest
-        dockerfiles: |
-          ./utils/dockerfiles/Dockerfile.tps
-        build-args: |
-          CHAIN=tick
-          VCS_REF=${{ github.ref }}
-          BUILD_DATE=${{ github.event.release.published_at }}
-
-    - name:                       Push image to docker.io
-      id:                         push-to-dockerhub
-      uses:                       redhat-actions/push-to-registry@v2
-      with:
-        registry:                 docker.io/paritytech
-        image:                    stps-tps
-        tags:                     tick-latest
-        username:                 ${{ secrets.DOCKERHUB_USERNAME }}
-        password:                 ${{ secrets.DOCKERHUB_TOKEN }}
-
-    - name:                       Check the image
-      run: |
-        echo "New image has been pushed to ${{ steps.push-to-dockerhub.outputs.registry-path }}"
-
-  sender-versi-tick:
-    name:                         Build and push sender (versi-tick) image
-    runs-on:                      ubuntu-latest
-    steps:
-    - uses:                       actions/checkout@v4
-    - name:                       Build Image
-      uses:                       redhat-actions/buildah-build@v2
-      with:
-        image:                    stps-sender
-        tags:                     versi-tick-latest
-        dockerfiles: |
-          ./utils/dockerfiles/Dockerfile.sender
-        build-args: |
-          CHAIN=versi-tick
-          VCS_REF=${{ github.ref }}
-          BUILD_DATE=${{ github.event.release.published_at }}
-
-    - name:                       Push image to docker.io
-      id:                         push-to-dockerhub
-      uses:                       redhat-actions/push-to-registry@v2
-      with:
-        registry:                 docker.io/paritytech
-        image:                    stps-sender
-        tags:                     versi-tick-latest
-        username:                 ${{ secrets.DOCKERHUB_USERNAME }}
-        password:                 ${{ secrets.DOCKERHUB_TOKEN }}
-
-    - name:                       Check the image
-      run: |
-        echo "New image has been pushed to ${{ steps.push-to-dockerhub.outputs.registry-path }}"
-
-  sender-versi-relay:
-    name:                         Build and push sender (versi-relay) image
-    runs-on:                      ubuntu-latest
-    steps:
-    - uses:                       actions/checkout@v4
-    - name:                       Build Image
-      uses:                       redhat-actions/buildah-build@v2
-      with:
-        image:                    stps-sender
-        tags:                     versi-relay-latest
-        dockerfiles: |
-          ./utils/dockerfiles/Dockerfile.sender
-        build-args: |
-          CHAIN=versi-relay
-          VCS_REF=${{ github.ref }}
-          BUILD_DATE=${{ github.event.release.published_at }}
-
-    - name:                       Push image to docker.io
-      id:                         push-to-dockerhub
-      uses:                       redhat-actions/push-to-registry@v2
-      with:
-        registry:                 docker.io/paritytech
-        image:                    stps-sender
-        tags:                     versi-relay-latest
-        username:                 ${{ secrets.DOCKERHUB_USERNAME }}
-        password:                 ${{ secrets.DOCKERHUB_TOKEN }}
-
-    - name:                       Check the image
-      run: |
-        echo "New image has been pushed to ${{ steps.push-to-dockerhub.outputs.registry-path }}"
-  
-  tps-versi-relay:
-    name:                         Build and push tps (versi-relay) image
-    runs-on:                      ubuntu-latest
-    steps:
-    - uses:                       actions/checkout@v4
-    - name:                       Build Image
-      uses:                       redhat-actions/buildah-build@v2
-      with:
-        image:                    stps-tps
-        tags:                     versi-relay-latest
-        dockerfiles: |
-          ./utils/dockerfiles/Dockerfile.tps
-        build-args: |
-          CHAIN=versi-relay
-          VCS_REF=${{ github.ref }}
-          BUILD_DATE=${{ github.event.release.published_at }}
-
-    - name:                       Push image to docker.io
-      id:                         push-to-dockerhub
-      uses:                       redhat-actions/push-to-registry@v2
-      with:
-        registry:                 docker.io/paritytech
-        image:                    stps-tps
-        tags:                     versi-relay-latest
-        username:                 ${{ secrets.DOCKERHUB_USERNAME }}
-        password:                 ${{ secrets.DOCKERHUB_TOKEN }}
-
-    - name:                       Check the image
-      run: |
-        echo "New image has been pushed to ${{ steps.push-to-dockerhub.outputs.registry-path }}"
-  
-  tps-versi-tick:
-    name:                         Build and push tps (versi-tick) image
-    runs-on:                      ubuntu-latest
-    steps:
-    - uses:                       actions/checkout@v4
-    - name:                       Build Image
-      uses:                       redhat-actions/buildah-build@v2
-      with:
-        image:                    stps-tps
-        tags:                     versi-tick-latest
-        dockerfiles: |
-          ./utils/dockerfiles/Dockerfile.tps
-        build-args: |
-          CHAIN=tick
-          VCS_REF=${{ github.ref }}
-          BUILD_DATE=${{ github.event.release.published_at }}
-
-    - name:                       Push image to docker.io
-      id:                         push-to-dockerhub
-      uses:                       redhat-actions/push-to-registry@v2
-      with:
-        registry:                 docker.io/paritytech
-        image:                    stps-tps
-        tags:                     versi-tick-latest
-        username:                 ${{ secrets.DOCKERHUB_USERNAME }}
-        password:                 ${{ secrets.DOCKERHUB_TOKEN }}
-
-    - name:                       Check the image
-      run: |
-        echo "New image has been pushed to ${{ steps.push-to-dockerhub.outputs.registry-path }}"
-  
-  sender-rococo:
-    name:                         Build and push sender (rococo) image
-    runs-on:                      ubuntu-latest
-    steps:
-    - uses:                       actions/checkout@v4
-    - name:                       Build Image
-      uses:                       redhat-actions/buildah-build@v2
-      with:
-        image:                    stps-sender
-        tags:                     rococo-latest
-        dockerfiles: |
-          ./utils/dockerfiles/Dockerfile.sender
-        build-args: |
-          CHAIN=rococo
-          VCS_REF=${{ github.ref }}
-          BUILD_DATE=${{ github.event.release.published_at }}
-
-    - name:                       Push image to docker.io
-      id:                         push-to-dockerhub
-      uses:                       redhat-actions/push-to-registry@v2
-      with:
-        registry:                 docker.io/paritytech
-        image:                    stps-sender
-        tags:                     rococo-latest
-        username:                 ${{ secrets.DOCKERHUB_USERNAME }}
-        password:                 ${{ secrets.DOCKERHUB_TOKEN }}
-
-    - name:                       Check the image
-      run: |
-        echo "New image has been pushed to ${{ steps.push-to-dockerhub.outputs.registry-path }}"
-  
-  tps-rococo:
-    name:                         Build and push tps (rococo) image
-    runs-on:                      ubuntu-latest
-    steps:
-    - uses:                       actions/checkout@v4
-    - name:                       Build Image
-      uses:                       redhat-actions/buildah-build@v2
-      with:
-        image:                    stps-tps
-        tags:                     rococo-latest
-        dockerfiles: |
-          ./utils/dockerfiles/Dockerfile.tps
-        build-args: |
-          CHAIN=rococo
-          VCS_REF=${{ github.ref }}
-          BUILD_DATE=${{ github.event.release.published_at }}
-
-    - name:                       Push image to docker.io
-      id:                         push-to-dockerhub
-      uses:                       redhat-actions/push-to-registry@v2
-      with:
-        registry:                 docker.io/paritytech
-        image:                    stps-tps
-        tags:                     rococo-latest
-        username:                 ${{ secrets.DOCKERHUB_USERNAME }}
-        password:                 ${{ secrets.DOCKERHUB_TOKEN }}
-
-    - name:                       Check the image
-      run: |
-        echo "New image has been pushed to ${{ steps.push-to-dockerhub.outputs.registry-path }}"

@@ -1,15 +1,17 @@
-FROM rust:latest as builder
+FROM rust:latest AS builder
 
 COPY . /build
 
-WORKDIR /build/utils/funder
+WORKDIR /build
 
 ARG VCS_REF
 ARG BUILD_DATE
 
-RUN cargo build --release
+RUN cargo build --release -p funder
 
-FROM docker.io/library/ubuntu:22.04
+FROM ubuntu:latest
+
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /build/utils/funder/target/release/funder /usr/local/bin
 
