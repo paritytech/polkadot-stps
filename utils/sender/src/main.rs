@@ -44,6 +44,11 @@ struct Args {
 	#[arg(long)]
 	node_url: String,
 
+	/// If `true`, will keep trying to connect to node at `node_url` until successful,
+	/// if `false` will fail immediately if connection to the node cannot be established.
+	#[arg(long, default_value_t = false)]
+	await_connection: bool,
+
 	/// Total number of senders
 	#[arg(long)]
 	total_senders: Option<usize>,
@@ -131,10 +136,52 @@ fn main() -> Result<(), Box<dyn Error>> {
 	let alice = <SrPair as Pair>::from_string(&ALICE_SEED, None).unwrap();
 	let alice_signer = PairSigner::new(alice.clone());
 
-	async fn create_api(node_url: String) -> OnlineClient<PolkadotConfig> {
+	async fn create_api(node_url: String, await_connection: bool) -> OnlineClient<PolkadotConfig> {
 		let node_url = url::Url::parse(&node_url).unwrap();
-		let (node_sender, node_receiver) =
-			WsTransportClientBuilder::default().build(node_url.clone()).await.unwrap();
+
+		let (node_sender, node_receiver) = if await_connection {
+			let backoff_increment: u64 = 1;
+			let mut backoff_secs: u64 = 1;
+			let mut retries: usize = 0;
+			// Backoff up to `max_sleep`
+			let max_sleep: u64 = 60;
+			loop {
+				match WsTransportClientBuilder::default().build(node_url.clone()).await {
+					Ok((rx, tx)) => {
+						if retries > 1 {
+							log::info!(
+								"Connected to node at {} after {} retries",
+								node_url,
+								retries
+							);
+						}
+						break (rx, tx)
+					},
+					Err(e) => {
+						log::warn!(
+							"WebSocket connect failed: {:?}. Retrying in {}s",
+							e,
+							backoff_secs
+						);
+						tokio::time::sleep(Duration::from_secs(backoff_secs)).await;
+						retries += 1;
+						backoff_secs =
+							backoff_secs.saturating_add(backoff_increment).min(max_sleep);
+					},
+				}
+			}
+		} else {
+			log::warn!(
+				"Not awaiting connection to node, failing immediately if node is not available"
+			);
+			let (rx, tx) = WsTransportClientBuilder::default()
+				.build(node_url.clone())
+				.await
+				.expect("WebSocket connect failed");
+			log::info!("Connected to node at {}", node_url);
+			(rx, tx)
+		};
+
 		let client = Client::builder()
 			.request_timeout(Duration::from_secs(10))
 			.max_buffer_capacity_per_subscription(16 * 1024 * 1024)
@@ -155,7 +202,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 			.unwrap()
 			.block_on(async {
 				let node_url = args.node_url.clone();
-				let api = create_api(node_url.clone()).await;
+				let api = create_api(node_url.clone(), true).await;
 				let mut best_block_stream =
 					api.blocks().subscribe_best().await.expect("Subscribe to best block failed");
 				let best_block = best_block_stream.next().await.unwrap().unwrap();
@@ -206,7 +253,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 			.block_on(
 				async {
 				let node_url = args.node_url.clone();
-				let api = create_api(node_url.clone()).await;
+				let api = create_api(node_url.clone(), args.await_connection).await;
 
 				// Subscribe to best block stream
 				let mut best_block_stream  = api.blocks().subscribe_best().await.expect("Subscribe to best block failed");
