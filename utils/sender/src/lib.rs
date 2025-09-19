@@ -1,17 +1,19 @@
 use futures::{stream::FuturesUnordered, StreamExt};
 use log::*;
+use sp_core::{
+	sr25519::{self, Pair as SrPair},
+	Pair,
+};
+use sp_runtime::{
+	traits::{IdentifyAccount, Verify},
+	MultiSignature,
+};
 use std::{error::Error, time::Duration};
 use subxt::{
-	config::polkadot::PolkadotExtrinsicParamsBuilder as Params,
-	config::substrate::AccountId32,
+	config::{polkadot::PolkadotExtrinsicParamsBuilder as Params, substrate::AccountId32},
 	dynamic::Value,
 	tx::{Signer, SubmittableTransaction},
 	OnlineClient, PolkadotConfig,
-};
-use sp_core::{sr25519::{self, Pair as SrPair}, Pair};
-use sp_runtime::{
-        traits::{IdentifyAccount, Verify},
-        MultiSignature,
 };
 
 /// Maximal number of connection attempts.
@@ -41,10 +43,7 @@ pub async fn connect(url: &str) -> Result<OnlineClient<PolkadotConfig>, Box<dyn 
 
 pub type SignedTx = SubmittableTransaction<PolkadotConfig, OnlineClient<PolkadotConfig>>;
 
-pub fn sign_txs<P, S, C>(
-	params: impl Iterator<Item = P>,
-	signer: S,
-) -> Vec<SignedTx>
+pub fn sign_txs<P, S, C>(params: impl Iterator<Item = P>, signer: S) -> Vec<SignedTx>
 where
 	P: Send + 'static,
 	S: Fn(P) -> SignedTx + Send + Sync + 'static,
@@ -66,11 +65,7 @@ where
 			.push(std::thread::spawn(move || chunk.into_iter().map(&*signer).collect::<Vec<_>>()));
 	});
 
-	threads
-		.into_iter()
-		.map(|h| h.join().unwrap())
-		.flatten()
-		.collect()
+	threads.into_iter().map(|h| h.join().unwrap()).flatten().collect()
 }
 
 #[derive(Clone)]
@@ -82,8 +77,7 @@ pub struct PairSigner {
 impl PairSigner {
 	/// Creates a new [`Signer`] from an [`sp_core::sr25519::Pair`].
 	pub fn new(signer: sr25519::Pair) -> Self {
-		let account_id =
-			<MultiSignature as Verify>::Signer::from(signer.public()).into_account();
+		let account_id = <MultiSignature as Verify>::Signer::from(signer.public()).into_account();
 		Self {
 			// Convert `sp_core::AccountId32` to `subxt::config::substrate::AccountId32`.
 			//
@@ -121,7 +115,6 @@ impl Signer<PolkadotConfig> for PairSigner {
 	}
 }
 
-
 pub fn sign_balance_transfers(
 	api: OnlineClient<PolkadotConfig>,
 	pairs: impl Iterator<Item = ((SrPair, u64), SrPair)>,
@@ -137,7 +130,10 @@ pub fn sign_balance_transfers(
 				Value::u128(1u32.into()),
 			],
 		);
-		api.tx().create_partial_offline(&tx_call, tx_params).expect("Failed to create partial offline transaction").sign(&signer)
+		api.tx()
+			.create_partial_offline(&tx_call, tx_params)
+			.expect("Failed to create partial offline transaction")
+			.sign(&signer)
 	})
 }
 
@@ -154,7 +150,7 @@ pub async fn submit_txs(
 		match a {
 			Ok(st) => match st {
 				subxt::tx::TxStatus::Validated => log::trace!("VALIDATED"),
-				subxt::tx::TxStatus::Broadcasted =>	log::trace!("BROADCASTED"),
+				subxt::tx::TxStatus::Broadcasted => log::trace!("BROADCASTED"),
 				subxt::tx::TxStatus::NoLongerInBestBlock => log::warn!("NO LONGER IN BEST BLOCK"),
 				subxt::tx::TxStatus::InBestBlock(_) => log::trace!("IN BEST BLOCK"),
 				subxt::tx::TxStatus::InFinalizedBlock(_) => log::trace!("IN FINALIZED BLOCK"),
