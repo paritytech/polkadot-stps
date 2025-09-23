@@ -1,7 +1,7 @@
 use crate::prelude::*;
 
 #[derive(Debug, Clone, Getters, Builder)]
-pub struct Parameters {
+pub struct SpammerParameters {
     #[getset(get = "pub")]
     node_url: Url,
 

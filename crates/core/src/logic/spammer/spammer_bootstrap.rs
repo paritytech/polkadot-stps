@@ -39,7 +39,7 @@ impl Spammer {
     #[builder]
     async fn build_senders(
         n: usize,
-        parameters: &Parameters,
+        parameters: &SpammerParameters,
         using: &Api,
     ) -> Result<IndexSet<Sender>> {
         let api = using;
@@ -59,7 +59,7 @@ impl Spammer {
     }
 
     #[builder]
-    fn build_recipients(n: usize, parameters: &Parameters) -> IndexSet<Recipient> {
+    fn build_recipients(n: usize, parameters: &SpammerParameters) -> IndexSet<Recipient> {
         let number_of_receiving_accounts = n;
         derive_accounts()
             .n(number_of_receiving_accounts)
@@ -71,7 +71,7 @@ impl Spammer {
             .collect::<IndexSet<_>>()
     }
 
-    pub async fn bootstrap(parameters: Parameters) -> Result<Self, Error> {
+    pub async fn bootstrap(parameters: SpammerParameters) -> Result<Self, Error> {
         debug!("Bootstrapping spammer with parameters: {parameters:?}");
 
         let api = create_api(parameters.node_url().clone())
