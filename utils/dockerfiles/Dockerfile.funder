@@ -1,17 +1,19 @@
-FROM rust:latest as builder
+FROM rust:latest AS builder
 
 COPY . /build
 
-WORKDIR /build/utils/funder
+WORKDIR /build
+
+RUN cargo build --release -p funder
+
+FROM ubuntu:latest
 
 ARG VCS_REF
 ARG BUILD_DATE
 
-RUN cargo build --release
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 
-FROM docker.io/library/ubuntu:22.04
-
-COPY --from=builder /build/utils/funder/target/release/funder /usr/local/bin
+COPY --from=builder /build/target/release/funder /usr/local/bin
 
 LABEL description="Docker image for sTPS funder binary" \
 	io.parity.image.authors="mattia@parity.io, devops-team@parity.io" \
@@ -20,8 +22,8 @@ LABEL description="Docker image for sTPS funder binary" \
 	io.parity.image.created="${BUILD_DATE}" \
     io.parity.image.source="https://github.com/paritytech/polkadot-stps/blob/${VCS_REF}/utils/dockerfiles/Dockerfile.funder"
 
-RUN useradd -m -u 1000 -U -s /bin/sh -d /funder funder
+RUN id -u funder >/dev/null 2>&1 || useradd -m -U -s /bin/sh -d /home/funder funder
 
 USER funder
 
-ENTRYPOINT [ "/usr/local/bin/funder" ]
+ENTRYPOINT ["/usr/local/bin/funder"]
