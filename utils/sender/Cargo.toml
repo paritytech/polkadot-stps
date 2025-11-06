@@ -11,12 +11,13 @@ log = "0.4.16"
 env_logger = "0.10.0"
 subxt = { workspace = true, features = ["jsonrpsee"] }
 clap = { version = "4.3.0", features = ["derive"] }
-tokio = { version = "1.28.2", features = ["rt-multi-thread", "macros", "time"] }
+tokio = { version = "1.28.2", features = ["rt-multi-thread", "macros", "net", "time"] }
 codec = { package = "parity-scale-codec", version = "3.5.0", default-features = false, features = [
 	"derive",
 	"full",
 	"bit-vec",
 ] }
+axum = "0.6"
 futures = "0.3.28"
 frame-system.workspace = true
 pallet-balances.workspace = true
