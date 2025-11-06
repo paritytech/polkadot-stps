@@ -1,3 +1,4 @@
+use axum::{extract::State, http::StatusCode, routing::get, Router};
 use clap::Parser;
 use codec::Decode;
 use futures::TryStreamExt;
@@ -5,7 +6,11 @@ use log::*;
 use std::{
 	collections::VecDeque,
 	error::Error,
-	sync::atomic::{AtomicU64, Ordering},
+	net::SocketAddr,
+	sync::{
+		atomic::{AtomicU64, Ordering},
+		Arc,
+	},
 	time::Instant,
 	u128,
 };
@@ -35,6 +40,43 @@ const SMALL_TOKEN_AMOUNT: Value =
 /// Amount to seed each sender with, largest possible value so that we do not run out of funds.
 const BIG_TOKEN_AMOUNT: Value =
 	Value { value: ValueDef::Primitive(Primitive::U128(u128::MAX)), context: () };
+
+async fn health_handler(State(api): State<Arc<OnlineClient<PolkadotConfig>>>) -> StatusCode {
+	match api.backend().latest_finalized_block_ref().await {
+		Ok(_) => StatusCode::OK,
+		Err(err) => {
+			log::warn!("Health check failed: {}", err);
+			StatusCode::SERVICE_UNAVAILABLE
+		},
+	}
+}
+
+fn spawn_healthcheck_server<F, Fut>(port: u16, create_api: F)
+where
+	F: FnOnce() -> Fut + Send + 'static,
+	Fut: std::future::Future<Output = OnlineClient<PolkadotConfig>> + 'static,
+{
+	let addr = SocketAddr::from(([0, 0, 0, 0], port));
+
+	std::thread::spawn(move || {
+		let runtime = tokio::runtime::Builder::new_current_thread()
+			.enable_all()
+			.build()
+			.expect("failed to build healthcheck runtime");
+		let api_future = create_api();
+
+		runtime.block_on(async move {
+			let api = Arc::new(api_future.await);
+			let app = Router::new().route("/health", get(health_handler)).with_state(api);
+
+			log::info!("Health endpoint listening on {}", addr);
+
+			if let Err(err) = axum::Server::bind(&addr).serve(app.into_make_service()).await {
+				log::error!("Health endpoint stopped: {}", err);
+			}
+		});
+	});
+}
 
 /// Util program to send transactions
 #[derive(Parser, Debug)]
@@ -69,6 +111,10 @@ struct Args {
         require_equals = false,
     )]
 	seed: bool,
+
+	/// Port for the `/health` HTTP endpoint.
+	#[arg(long, default_value_t = 8080)]
+	health_port: u16,
 }
 
 // FIXME: This assumes that all the chains supported by sTPS use this `AccountInfo` type. Currently,
@@ -78,7 +124,6 @@ type AccountInfo = frame_system::AccountInfo<u32, pallet_balances::AccountData<u
 
 use jsonrpsee_client_transport::ws::WsTransportClientBuilder;
 use jsonrpsee_core::client::{async_client::PingConfig, Client};
-use std::sync::Arc;
 use subxt::backend::legacy::LegacyBackend;
 
 use tokio::time::Duration;
@@ -145,6 +190,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 		let backend = Arc::new(LegacyBackend::builder().build(client));
 		OnlineClient::from_backend(backend).await.unwrap()
 	}
+
+	let health_node_url = args.node_url.clone();
+	spawn_healthcheck_server(args.health_port, move || create_api(health_node_url.clone()));
 
 	if args.seed {
 		log::info!("Seeding accounts");
