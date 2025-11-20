@@ -10,7 +10,7 @@ jobs:
     name:                         Build and push funder image
     runs-on:                      ubuntu-latest
     steps:
-    - uses:                       actions/checkout@v4
+    - uses:                       actions/checkout@v6
     - name:                       Build Image
       uses:                       redhat-actions/buildah-build@7a95fa7ee0f02d552a32753e7414641a04307056 # v2.13
       with:
@@ -40,7 +40,7 @@ jobs:
     name:                         Build and push sender image
     runs-on:                      ubuntu-latest
     steps:
-    - uses:                       actions/checkout@v4
+    - uses:                       actions/checkout@v6
     - name:                       Build Image
       uses:                       redhat-actions/buildah-build@v2
       with:
