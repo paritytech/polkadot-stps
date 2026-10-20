@@ -24,7 +24,7 @@ jobs:
 
     - name:                       Push image to docker.io
       id:                         push-to-dockerhub
-      uses:                       redhat-actions/push-to-registry@v2
+      uses:                       redhat-actions/push-to-registry@v3
       with:
         registry:                 docker.io/paritytech
         image:                    stps-funder
@@ -55,7 +55,7 @@ jobs:
 
     - name:                       Push image to docker.io
       id:                         push-to-dockerhub
-      uses:                       redhat-actions/push-to-registry@v2
+      uses:                       redhat-actions/push-to-registry@v3
       with:
         registry:                 docker.io/paritytech
         image:                    stps-sender
